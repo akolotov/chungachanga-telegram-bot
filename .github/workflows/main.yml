@@ -13,6 +13,9 @@ jobs:
   build-bot:
     name: Bot docker image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
