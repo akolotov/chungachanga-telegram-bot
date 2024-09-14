@@ -1,0 +1,4 @@
+bot/__pycache__/
+*.pyc
+data/*
+.devcontainer/*

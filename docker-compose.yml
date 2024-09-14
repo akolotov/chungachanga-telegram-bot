@@ -1,0 +1,20 @@
+services:
+  chunga_changa_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/akolotov/chungachanga-telegram-bot
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHANNEL_ID=${TELEGRAM_CHANNEL_ID}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL}
+      - TELEGRAM_OPERATORS=${TELEGRAM_OPERATORS}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
