@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ghcr.io/akolotov/chungachanga-telegram-bot
+    image: ghcr.io/akolotov/chungachanga-telegram-bot:latest
     volumes:
       - ./data:/app/data
     environment:

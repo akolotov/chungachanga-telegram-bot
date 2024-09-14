@@ -3,8 +3,7 @@ import logging
 from dotenv import load_dotenv
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from telegram.constants import ParseMode
-from telegram.helpers import escape_markdown
+from telegram.request import HTTPXRequest
 
 # Import our custom modules
 from web_parser import parse_article
@@ -179,7 +178,15 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 def main():
     """Start the bot."""
-    application = Application.builder().token(BOT_TOKEN).build()
+    custom_request = HTTPXRequest(
+        connection_pool_size=5,
+        read_timeout=10,
+        write_timeout=10,
+        connect_timeout=10,
+        pool_timeout=1
+    )
+
+    application = Application.builder().token(BOT_TOKEN).request(custom_request).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_url))
