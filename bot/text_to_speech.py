@@ -19,8 +19,12 @@ class TextToSpeech:
             raise ElevenLabsError("ElevenLabs API key not found. Please set the ELEVENLABS_API_KEY environment variable.")
         
         self.client = ElevenLabs(api_key=self.api_key)
+        # Daniel, onwK4e9ZLuTAKqWW03F9
+        # Sarah, EXAVITQu4vr4xnSDxMaL
+        # Laura, FGY2WhTYpPnrIDTdsKH5
+        # Will, bIHbv24MWmeRgasZH58o
         self.voice_ids = {
-            "female": "FGY2WhTYpPnrIDTdsKH5",  # Laura voice id
+            "female": "EXAVITQu4vr4xnSDxMaL",  # Sarah voice id
             "male": "bIHbv24MWmeRgasZH58o"     # Will voice id
         }
 
