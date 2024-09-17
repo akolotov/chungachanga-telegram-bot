@@ -3,6 +3,7 @@ import logging
 from dotenv import load_dotenv
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from datetime import datetime, timezone
 
 # Import our custom modules
 from web_parser import parse_article
@@ -121,9 +122,22 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Step 5: Send files to operator
     with open(file_paths['audio'], 'rb') as audio:
-        await update.message.reply_voice(audio)
+        # Format the reset date
+        reset_date = datetime.fromtimestamp(text_to_speech_result['next_reset_timestamp'], tz=timezone.utc).strftime("%Y-%m-%d")
+        
+        caption = (f"Used tokens: {text_to_speech_result['used_tokens']}\n"
+                   f"Remaining characters: {text_to_speech_result['remaining_characters']}\n"
+                   f"Next reset date: {reset_date}")
+        
+        await update.message.reply_voice(audio, caption=caption)
+    
     with open(file_paths['transcript'], 'r', encoding='utf-8') as f:
-        await update.message.reply_text(f"Transcript:\n\n{f.read()}")
+        transcript = f.read()
+        transcript_length = len(transcript)
+        await update.message.reply_text(
+            f"Transcript (length: {transcript_length} characters):\n\n{transcript}"
+        )
+    
     with open(file_paths['translation'], 'r', encoding='utf-8') as f:
         await update.message.reply_text(f"Translation:\n\n{f.read()}")
 

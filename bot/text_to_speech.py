@@ -1,24 +1,32 @@
 import os
-from pathlib import Path
 from elevenlabs import VoiceSettings
 from elevenlabs.client import ElevenLabs
 from dotenv import load_dotenv
-from typing import Optional
+from typing import Optional, Tuple, Dict, List
+import requests
+
+SAFETY_FACTOR = 1.5 # Coefficient to multiply text length for safety
+
+load_dotenv()
+api_keys_str = os.getenv("ELEVENLABS_API_KEY", "")
 
 class ElevenLabsError(Exception):
     """Custom exception for ElevenLabs API errors."""
     pass
 
+class InsufficientCreditsError(ElevenLabsError):
+    """Exception raised when there are insufficient credits across all API keys."""
+    pass
+
 class TextToSpeech:
-    """A class to handle text-to-speech conversion using ElevenLabs API."""
+    """A class to handle text-to-speech conversion using ElevenLabs API with multiple API keys."""
 
     def __init__(self):
-        load_dotenv()
-        self.api_key = os.getenv("ELEVENLABS_API_KEY")
-        if not self.api_key:
-            raise ElevenLabsError("ElevenLabs API key not found. Please set the ELEVENLABS_API_KEY environment variable.")
+        self.api_keys = self._load_api_keys()
+        if not self.api_keys:
+            raise ElevenLabsError("No ElevenLabs API keys found. Please set the ELEVENLABS_API_KEY environment variable.")
         
-        self.client = ElevenLabs(api_key=self.api_key)
+        self.clients = [ElevenLabs(api_key=key) for key in self.api_keys]
         # Daniel, onwK4e9ZLuTAKqWW03F9
         # Sarah, EXAVITQu4vr4xnSDxMaL
         # Laura, FGY2WhTYpPnrIDTdsKH5
@@ -27,8 +35,67 @@ class TextToSpeech:
             "female": "EXAVITQu4vr4xnSDxMaL",  # Sarah voice id
             "male": "bIHbv24MWmeRgasZH58o"     # Will voice id
         }
+        self.token_safety_factor = SAFETY_FACTOR
 
-    def text_to_speech_file(self, text: str, voice: str, output_path: str) -> Optional[str]:
+    def _load_api_keys(self) -> List[str]:
+        """Load API keys from environment variable."""
+        return [key.strip() for key in api_keys_str.split(",") if key.strip()]
+
+    def get_credit_usage(self, api_key: str) -> Tuple[int, int]:
+        """
+        Requests the current amount of used credits for a specific API key.
+
+        Args:
+            api_key (str): The API key to check.
+
+        Returns:
+            Tuple[int, int]: A tuple containing (remaining_characters, next_reset_timestamp)
+
+        Raises:
+            ElevenLabsError: If there's an error during the API request.
+        """
+        url = "https://api.elevenlabs.io/v1/user/subscription"
+        headers = {"xi-api-key": api_key}
+
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+            character_count = data.get('character_count', 0)
+            character_limit = data.get('character_limit', 0)
+            next_reset = data.get('next_character_count_reset_unix', 0)
+
+            remaining_characters = character_limit - character_count
+
+            return remaining_characters, next_reset
+
+        except requests.RequestException as e:
+            raise ElevenLabsError(f"Error fetching credit usage: {str(e)}")
+
+    def select_api_key(self, text_length: int) -> Tuple[str, ElevenLabs, int]:
+        """
+        Selects an appropriate API key based on the required text length.
+
+        Args:
+            text_length (int): The length of the text to be converted.
+
+        Returns:
+            Tuple[str, ElevenLabs, int]: A tuple containing the selected API key, its corresponding client, and the remaining characters.
+
+        Raises:
+            InsufficientCreditsError: If no API key has sufficient credits.
+        """
+        required_tokens = int(text_length * self.token_safety_factor)
+
+        for api_key, client in zip(self.api_keys, self.clients):
+            remaining_characters, _ = self.get_credit_usage(api_key)
+            if remaining_characters >= required_tokens:
+                return api_key, client, remaining_characters
+
+        raise InsufficientCreditsError("Insufficient credits across all API keys.")
+
+    def text_to_speech_file(self, text: str, voice: str, output_path: str) -> Optional[Dict[str, any]]:
         """
         Converts text to speech and saves it as an MP3 file at the specified path.
 
@@ -38,17 +105,22 @@ class TextToSpeech:
             output_path (str): The path where the audio file should be saved.
 
         Returns:
-            Optional[str]: The path of the saved audio file, or None if conversion failed.
+            Optional[Dict[str, any]]: A dictionary containing the path of the saved audio file,
+                                      remaining characters, next reset timestamp, and used tokens,
+                                      or None if conversion failed.
 
         Raises:
             ElevenLabsError: If there's an error during the text-to-speech conversion.
+            InsufficientCreditsError: If there are insufficient credits across all API keys.
         """
         try:
             chosen_voice_id = self.voice_ids.get(voice.lower())
             if not chosen_voice_id:
                 raise ElevenLabsError(f"Invalid voice option: {voice}. Choose 'male' or 'female'.")
 
-            response = self.client.text_to_speech.convert(
+            api_key, client, remaining_characters_before = self.select_api_key(len(text))
+
+            response = client.text_to_speech.convert(
                 voice_id=chosen_voice_id,
                 output_format="mp3_22050_32",
                 text=text,
@@ -70,12 +142,25 @@ class TextToSpeech:
                     if chunk:
                         f.write(chunk)
 
-            return output_path
+            # Get credit usage after conversion
+            remaining_characters, next_reset = self.get_credit_usage(api_key)
 
+            # Calculate used tokens
+            used_tokens = remaining_characters_before - remaining_characters
+
+            return {
+                "audio_path": output_path,
+                "remaining_characters": remaining_characters,
+                "next_reset_timestamp": next_reset,
+                "used_tokens": used_tokens
+            }
+
+        except InsufficientCreditsError as e:
+            raise e
         except Exception as e:
             raise ElevenLabsError(f"Error during text-to-speech conversion: {str(e)}")
 
-def convert_text_to_speech(text: str, voice: str, output_path: str) -> Optional[str]:
+def convert_text_to_speech(text: str, voice: str, output_path: str) -> Optional[Dict[str, any]]:
     """
     Converts text to speech using the TextToSpeech class and saves it to the specified path.
 
@@ -85,12 +170,14 @@ def convert_text_to_speech(text: str, voice: str, output_path: str) -> Optional[
         output_path (str): The path where the audio file should be saved.
 
     Returns:
-        Optional[str]: The path of the saved audio file, or None if conversion failed.
+        Optional[Dict[str, any]]: A dictionary containing the path of the saved audio file,
+                                  remaining characters, next reset timestamp, and used tokens,
+                                  or None if conversion failed.
     """
     tts = TextToSpeech()
     try:
         return tts.text_to_speech_file(text, voice, output_path)
-    except ElevenLabsError as e:
+    except (ElevenLabsError, InsufficientCreditsError) as e:
         print(f"An error occurred during text-to-speech conversion: {e}")
         return None
 
@@ -98,8 +185,11 @@ if __name__ == "__main__":
     # Example usage
     sample_text = "El Conassif amplió el plazo de intervención a Desyfin. Esta financiera tiene ahora hasta el 13 de octubre. La ley permite extender hasta 30 días más por casos complejos."
     output_file = "data/voice_note.mp3"
-    audio_file_path = convert_text_to_speech(sample_text, "female", output_file)
-    if audio_file_path:
-        print(f"Audio file saved at: {audio_file_path}")
+    result = convert_text_to_speech(sample_text, "female", output_file)
+    if result:
+        print(f"Audio file saved at: {result['audio_path']}")
+        print(f"Remaining characters: {result['remaining_characters']}")
+        print(f"Next reset timestamp: {result['next_reset_timestamp']}")
+        print(f"Used tokens: {result['used_tokens']}")
     else:
         print("Failed to convert text to speech.")
