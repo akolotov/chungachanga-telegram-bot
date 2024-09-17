@@ -84,6 +84,7 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Content for {url} already exists.")
         await update.message.reply_text("Content for this URL already exists. Retrieving...")
         file_paths = existing_content
+        text_to_speech_result = None
     else:
         await update.message.reply_text("Processing the URL...")
         timestamp = update.message.date.strftime("%Y%m%d_%H%M%S")
@@ -122,14 +123,17 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Step 5: Send files to operator
     with open(file_paths['audio'], 'rb') as audio:
-        # Format the reset date
-        reset_date = datetime.fromtimestamp(text_to_speech_result['next_reset_timestamp'], tz=timezone.utc).strftime("%Y-%m-%d")
-        
-        caption = (f"Used tokens: {text_to_speech_result['used_tokens']}\n"
-                   f"Remaining characters: {text_to_speech_result['remaining_characters']}\n"
-                   f"Next reset date: {reset_date}")
-        
-        await update.message.reply_voice(audio, caption=caption)
+        if text_to_speech_result:
+            # Format the reset date
+            reset_date = datetime.fromtimestamp(text_to_speech_result['next_reset_timestamp'], tz=timezone.utc).strftime("%Y-%m-%d")
+            
+            caption = (f"Used tokens: {text_to_speech_result['used_tokens']}\n"
+                       f"Remaining characters: {text_to_speech_result['remaining_characters']}\n"
+                       f"Next reset date: {reset_date}")
+            
+            await update.message.reply_voice(audio, caption=caption)
+        else:
+            await update.message.reply_voice(audio)
     
     with open(file_paths['transcript'], 'r', encoding='utf-8') as f:
         transcript = f.read()
