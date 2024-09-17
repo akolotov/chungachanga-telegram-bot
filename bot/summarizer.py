@@ -51,6 +51,8 @@ Process:
    - Use B1 level Spanish (CEFR scale)
    - Limit to 3 sentences, each generally 7-10 words
    - Avoid acronyms, idioms, and complex terminology
+   - When referring to Costa Rican currency, always use the word “colones” instead of the symbol ₡
+   - Avoid using the symbol # to indicate numbers. Always write “número” instead.
    - Use a casual, friendly tone
    - Ensure cultural sensitivity and relevance to the audience
    - If complex topics or necessary technical terms arise, briefly explain them in simple language.
