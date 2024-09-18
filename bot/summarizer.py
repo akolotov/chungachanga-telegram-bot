@@ -53,20 +53,13 @@ Process:
    - Avoid acronyms, idioms, and complex terminology
    - When referring to Costa Rican currency, always use the word “colones” instead of the symbol ₡
    - Avoid using the symbol # to indicate numbers. Always write “número” instead.
+   - Do not include URLs or website links in the final transcription. If necessary, summarize or mention the source without using a URL.
    - Use a casual, friendly tone
    - Ensure cultural sensitivity and relevance to the audience
    - If complex topics or necessary technical terms arise, briefly explain them in simple language.
-4. Based on the following criteria, assign the tag 'male' or 'female' to indicate the preferred DJ for delivering the news:
-   - Political News: male
-   - Health and Lifestyle: female
-   - Entertainment: male for technical aspects, female for celebrity gossip
-   - Financial News: male
-   - Sports: male
-   - Weather: female
-   - Crime and Disaster Reporting: male
-   - Science and Technology: male
-   - Emotional or Human-Interest Stories: female
-   - General News: male for analytical coverage, female for human-interest angles
+4. Assign the tag ‘male’ or ‘female’ to the DJ based on these guidelines:
+   - Male: Political, Entertainment (technical), Financial, Sports, Crime, Science/Technology, General (analytical)
+   - Female: Health/Lifestyle, Entertainment (celebrity), Weather, Human-Interest, General (human-interest)
 5. Translate the news into Russian, ensuring it is clear and accurate while retaining the meaning and tone of the original Spanish version.
 
 Your goal is to provide the output following the schema provided. Ensure that all fields are present and correctly formatted.
