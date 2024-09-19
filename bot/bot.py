@@ -13,6 +13,7 @@ from summarizer import summarize_article
 from text_to_speech import convert_text_to_speech
 from telegram_sender import send_telegram_messages, MessageContent
 from content_db import ContentDB
+from helper import format_vocabulary, trim_message
 
 # Configure logging
 logging.basicConfig(
@@ -135,16 +136,11 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Step 5: Send files to operator
     # Send vocabulary
     if vocabulary:
-        vocabulary_text = "Useful for understanding vocabulary:\n\n"
-        vocabulary_items = []
-        for item in vocabulary:
-            escaped_word = escape_markdown(item.word, version=2)
-            escaped_translation = escape_markdown(item.translation, version=2)
-            vocabulary_items.append(f"{escaped_word} \\(_{escaped_translation}_\\)")
-        vocabulary_text += ", ".join(vocabulary_items)
+        formatted_vocabulary = format_vocabulary(vocabulary)
+        vocabulary_message = f"Useful for understanding vocabulary:\n\n{formatted_vocabulary}"
         
         await update.message.reply_text(
-            vocabulary_text,
+            trim_message(vocabulary_message),
             parse_mode=ParseMode.MARKDOWN_V2
         )
 
@@ -181,7 +177,8 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         url=url,
         voice_note_path=file_paths['audio'],
         transcript_path=file_paths['transcript'],
-        translation_path=file_paths['translation']
+        translation_path=file_paths['translation'],
+        vocabulary=vocabulary
     )
 
     # Create inline keyboard for confirmation

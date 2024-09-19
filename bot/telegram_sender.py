@@ -1,11 +1,13 @@
 import os
 import asyncio
 from dataclasses import dataclass
+from typing import List, Optional
 from telegram import Bot, InputFile
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from telegram.helpers import escape_markdown
 from dotenv import load_dotenv
+from helper import format_vocabulary, trim_message
 
 @dataclass
 class MessageContent:
@@ -17,11 +19,13 @@ class MessageContent:
         voice_note_path (str): Path to the voice note file.
         transcript_path (str): Path to the transcript file.
         translation_path (str): Path to the translation file.
+        vocabulary (Optional[List[VocabularyItem]]): List of vocabulary items.
     """
     url: str
     voice_note_path: str
     transcript_path: str
     translation_path: str
+    vocabulary: Optional[List] = None
 
 class TelegramSenderError(Exception):
     """Custom exception for Telegram sending errors."""
@@ -70,6 +74,17 @@ class TelegramSender:
             if content.voice_note_path and os.path.exists(content.voice_note_path):
                 with open(content.voice_note_path, 'rb') as voice_note:
                     await self.bot.send_voice(chat_id=self.channel_id, voice=InputFile(voice_note))
+
+            # Send vocabulary if available
+            if content.vocabulary:
+                formatted_vocabulary = format_vocabulary(content.vocabulary)
+                vocabulary_message = f"Palabras para entender el audio:\n{formatted_vocabulary}"
+                
+                await self.bot.send_message(
+                    chat_id=self.channel_id,
+                    text=trim_message(vocabulary_message),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
 
             # Send transcript with URL
             with open(content.transcript_path, 'r', encoding='utf-8') as transcript:

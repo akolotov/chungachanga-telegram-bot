@@ -67,7 +67,7 @@ Process:
    - Male: Political, Entertainment (technical), Financial, Sports, Crime, Science/Technology, General (analytical)
    - Female: Health/Lifestyle, Entertainment (celebrity), Weather, Human-Interest, General (human-interest)
 5. Translate the news into Russian, ensuring it is clear and accurate while retaining the meaning and tone of the original Spanish version.
-6. Identify three Spanish words in the text of the news which are crucial for understanding the meaning. Prepare their translation to Russian in the context of the news.
+6. Identify three important Spanish words in the news text that are crucial for understanding, avoiding simple words or those with similar roots or sounds in Russian, and provide their accurate Russian translations in context.
 
 Your goal is to provide the output following the schema provided. Ensure that all fields are present and correctly formatted.
 Here is a description of the parameters:

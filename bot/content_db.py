@@ -23,7 +23,7 @@ class ContentDB:
             json.dump(self.db, f, indent=2)
 
     def add_content(self, url: str, content: Dict[str, str], vocabulary: Optional[List[VocabularyItem]] = None):
-        self.db[url] = {**content, "vocabulary": [v.model_dump() for v in vocabulary] if vocabulary else None}
+        self.db[url] = {**content, "vocabulary": [v.model_dump(mode = 'json') for v in vocabulary] if vocabulary else None}
         self._save_db()
 
     def get_content(self, url: str) -> Optional[Dict[str, any]]:
