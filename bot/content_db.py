@@ -1,13 +1,18 @@
 import json
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, List
+from pydantic import BaseModel
+
+class VocabularyItem(BaseModel):
+    word: str
+    translation: str
 
 class ContentDB:
     def __init__(self, db_file: str = "content_db.json"):
         self.db_file = db_file
-        self.db: Dict[str, Dict[str, str]] = self._load_db()
+        self.db: Dict[str, Dict[str, any]] = self._load_db()
 
-    def _load_db(self) -> Dict[str, Dict[str, str]]:
+    def _load_db(self) -> Dict[str, Dict[str, any]]:
         if os.path.exists(self.db_file):
             with open(self.db_file, 'r') as f:
                 return json.load(f)
@@ -17,12 +22,15 @@ class ContentDB:
         with open(self.db_file, 'w') as f:
             json.dump(self.db, f, indent=2)
 
-    def add_content(self, url: str, content: Dict[str, str]):
-        self.db[url] = content
+    def add_content(self, url: str, content: Dict[str, str], vocabulary: Optional[List[VocabularyItem]] = None):
+        self.db[url] = {**content, "vocabulary": [v.model_dump() for v in vocabulary] if vocabulary else None}
         self._save_db()
 
-    def get_content(self, url: str) -> Optional[Dict[str, str]]:
-        return self.db.get(url)
+    def get_content(self, url: str) -> Optional[Dict[str, any]]:
+        content = self.db.get(url)
+        if content and content.get("vocabulary"):
+            content["vocabulary"] = [VocabularyItem(**item) for item in content["vocabulary"]]
+        return content
 
     def url_exists(self, url: str) -> bool:
         return url in self.db

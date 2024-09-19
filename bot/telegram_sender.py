@@ -1,6 +1,5 @@
 import os
 import asyncio
-from typing import Optional
 from dataclasses import dataclass
 from telegram import Bot, InputFile
 from telegram.constants import ParseMode

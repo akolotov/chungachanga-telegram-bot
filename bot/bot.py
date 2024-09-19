@@ -1,8 +1,10 @@
 import os
 import logging
 from dotenv import load_dotenv
-from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram.helpers import escape_markdown
+from telegram.constants import ParseMode
 from datetime import datetime, timezone
 
 # Import our custom modules
@@ -89,6 +91,7 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Content for this URL already exists. Retrieving...")
         file_paths = existing_content
         text_to_speech_result = None
+        vocabulary = existing_content.get("vocabulary")
     else:
         await update.message.reply_text("Processing the URL...")
         timestamp = update.message.date.strftime("%Y%m%d_%H%M%S")
@@ -106,6 +109,8 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not summary:
             await update.message.reply_text("Failed to summarize the article. Please try another URL.")
             return
+
+        vocabulary = summary.vocabulary
 
         # Step 3: Convert summary to speech (if enabled)
         audio_file_path = ""
@@ -125,9 +130,24 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Add content to the database
         logger.info(f"Updating the content DB.")
-        content_db.add_content(url, file_paths)
+        content_db.add_content(url, file_paths, vocabulary)
 
     # Step 5: Send files to operator
+    # Send vocabulary
+    if vocabulary:
+        vocabulary_text = "Useful for understanding vocabulary:\n\n"
+        vocabulary_items = []
+        for item in vocabulary:
+            escaped_word = escape_markdown(item.word, version=2)
+            escaped_translation = escape_markdown(item.translation, version=2)
+            vocabulary_items.append(f"{escaped_word} \\(_{escaped_translation}_\\)")
+        vocabulary_text += ", ".join(vocabulary_items)
+        
+        await update.message.reply_text(
+            vocabulary_text,
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+
     if file_paths['audio'] and os.path.exists(file_paths['audio']):
         with open(file_paths['audio'], 'rb') as audio:
             if text_to_speech_result:

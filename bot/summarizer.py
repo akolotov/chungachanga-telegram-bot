@@ -1,14 +1,19 @@
 import os
 import openai
 from pydantic import BaseModel
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 from textwrap import dedent
 from dotenv import load_dotenv
+
+class VocabularyItem(BaseModel):
+    word: str
+    translation: str
 
 class NewsSummary(BaseModel):
     voice_tag: Literal['male', 'female']
     news_original: str
     news_translated: str
+    vocabulary: List[VocabularyItem]
 
 class OpenAISummarizerError(Exception):
     """Custom exception for OpenAI Summarizer errors."""
@@ -36,13 +41,14 @@ class OpenAISummarizer:
 
         Returns:
             Optional[NewsSummary]: A NewsSummary object containing the summarized news in Spanish,
-                                   its Russian translation, and a voice tag. Returns None if summarization fails.
+                                   its Russian translation, a voice tag, and a vocabulary list.
+                                   Returns None if summarization fails.
 
         Raises:
             OpenAISummarizerError: If there's an error during the summarization process.
         """
         prompt = """
-You are a content editor for a Costa Rican radio station targeting non-native Spanish speakers, aged 25-45. Your task is to create concise, easy-to-understand news announcements, each approximately 20 seconds long when read aloud. In addition to writing the news, you will assign either a 'male' or 'female' DJ to read the text based on the news category, and provide a Russian translation for publication on the station's website.
+You are a content editor for a Costa Rican radio station targeting non-native Spanish speakers, aged 25-45. Your task is to create concise, easy-to-understand news announcements, each approximately 20 seconds long when read aloud. In addition to writing the news, you will assign either a 'male' or 'female' DJ to read the text based on the news category, provide a Russian translation for publication on the station's website, and identify key vocabulary words.
 
 Process:
 1. Read the original article.
@@ -51,22 +57,26 @@ Process:
    - Use B1 level Spanish (CEFR scale)
    - Limit to 3 sentences, each generally 7-10 words
    - Avoid acronyms, idioms, and complex terminology
-   - When referring to Costa Rican currency, always use the word “colones” instead of the symbol ₡
-   - Avoid using the symbol # to indicate numbers. Always write “número” instead.
+   - When referring to Costa Rican currency, always use the word "colones" instead of the symbol ₡
+   - Avoid using the symbol # to indicate numbers. Always write "número" instead.
    - Do not include URLs or website links in the final transcription. If necessary, summarize or mention the source without using a URL.
    - Use a casual, friendly tone
    - Ensure cultural sensitivity and relevance to the audience
    - If complex topics or necessary technical terms arise, briefly explain them in simple language.
-4. Assign the tag ‘male’ or ‘female’ to the DJ based on these guidelines:
+4. Assign the tag 'male' or 'female' to the DJ based on these guidelines:
    - Male: Political, Entertainment (technical), Financial, Sports, Crime, Science/Technology, General (analytical)
    - Female: Health/Lifestyle, Entertainment (celebrity), Weather, Human-Interest, General (human-interest)
 5. Translate the news into Russian, ensuring it is clear and accurate while retaining the meaning and tone of the original Spanish version.
+6. Identify three Spanish words in the text of the news which are crucial for understanding the meaning. Prepare their translation to Russian in the context of the news.
 
 Your goal is to provide the output following the schema provided. Ensure that all fields are present and correctly formatted.
 Here is a description of the parameters:
 - 'voice_tag': The assigned voice tag ('male' or 'female')
 - 'news_original': The final news transcription in Spanish
 - 'news_translated': The news translation in Russian
+- 'vocabulary': the list containing three elements where each element is a map:
+    - 'word': the original word from the news crucial for understanding 
+    - 'translation': the translation of the word to Russian
 
 If the news category does not clearly fit into the predefined tags, default to using 'male' for the `voice_tag`.
         """
@@ -102,7 +112,8 @@ def summarize_article(article: str) -> Optional[NewsSummary]:
 
     Returns:
         Optional[NewsSummary]: A NewsSummary object containing the summarized news in Spanish,
-                               its Russian translation, and a voice tag. Returns None if summarization fails.
+                               its Russian translation, a voice tag, and a vocabulary list.
+                               Returns None if summarization fails.
     """
     summarizer = OpenAISummarizer()
     try:
@@ -126,5 +137,8 @@ Al finalizar el plazo acordado, la interventoría presentará al Conassif un inf
         print(f"Voice Tag: {summary.voice_tag}")
         print(f"Spanish Summary: {summary.news_original}")
         print(f"Russian Translation: {summary.news_translated}")
+        print("Vocabulary:")
+        for item in summary.vocabulary:
+            print(f"  {item.word}: {item.translation}")
     else:
         print("Failed to create summary.")
