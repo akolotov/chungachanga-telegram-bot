@@ -57,8 +57,9 @@ class TelegramSender:
         """
         try:
             # Check if all files are accessible
-            with open(content.voice_note_path, 'rb'):
-                pass
+            if content.voice_note_path:
+                with open(content.voice_note_path, 'rb'):
+                    pass
             with open(content.transcript_path, 'r', encoding='utf-8'):
                 pass
             with open(content.translation_path, 'r', encoding='utf-8'):
@@ -66,9 +67,10 @@ class TelegramSender:
 
             # If all files are accessible, proceed with sending
             
-            # Send voice note
-            with open(content.voice_note_path, 'rb') as voice_note:
-                await self.bot.send_voice(chat_id=self.channel_id, voice=InputFile(voice_note))
+            # Send voice note if path is provided and file exists
+            if content.voice_note_path and os.path.exists(content.voice_note_path):
+                with open(content.voice_note_path, 'rb') as voice_note:
+                    await self.bot.send_voice(chat_id=self.channel_id, voice=InputFile(voice_note))
 
             # Send transcript with URL
             with open(content.transcript_path, 'r', encoding='utf-8') as transcript:

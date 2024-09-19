@@ -30,6 +30,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
 OPERATORS = os.getenv("TELEGRAM_OPERATORS", "").split(",")
+DISABLE_VOICE_NOTES = os.getenv("DISABLE_VOICE_NOTES", "false").lower() == "true"
 
 # Initialize ContentDB
 content_db = ContentDB(os.getenv("CONTENT_DB", os.path.join("data", "content_db.json")))
@@ -48,11 +49,14 @@ def save_files(content, summary, audio_path, timestamp):
         'content': os.path.join(get_output_dir('content'), f"content_{timestamp}.txt"),
         'transcript': os.path.join(get_output_dir('transcript'), f"transcript_{timestamp}.txt"),
         'translation': os.path.join(get_output_dir('translation'), f"translation_{timestamp}.txt"),
-        'audio': audio_path
+        'audio': audio_path if audio_path else ""  # Set to empty string if no audio path
     }
 
-    for dir_path in set(os.path.dirname(path) for path in file_paths.values()):
-        os.makedirs(dir_path, exist_ok=True)
+    # Create directories only for non-empty paths
+    for key, path in file_paths.items():
+        if path:  # Only create directory if path is not empty
+            dir_path = os.path.dirname(path)
+            os.makedirs(dir_path, exist_ok=True)
 
     with open(file_paths['content'], 'w', encoding='utf-8') as f:
         f.write(content)
@@ -103,15 +107,17 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Failed to summarize the article. Please try another URL.")
             return
 
-        # Step 3: Convert summary to speech
-        audio_output_dir = get_output_dir('audio')
-        os.makedirs(audio_output_dir, exist_ok=True)
-        audio_file_path = os.path.join(audio_output_dir, f"audio_{timestamp}.mp3")
-        logger.info(f"Sending a request to ElevenLabs to create a voice note.")
-        text_to_speech_result = convert_text_to_speech(summary.news_original, summary.voice_tag, audio_file_path)
-        if not text_to_speech_result:
-            await update.message.reply_text("Failed to convert text to speech. Please try again.")
-            return
+        # Step 3: Convert summary to speech (if enabled)
+        audio_file_path = ""
+        text_to_speech_result = None
+        if not DISABLE_VOICE_NOTES:
+            audio_output_dir = get_output_dir('audio')
+            os.makedirs(audio_output_dir, exist_ok=True)
+            audio_file_path = os.path.join(audio_output_dir, f"audio_{timestamp}.mp3")
+            logger.info(f"Sending a request to ElevenLabs to create a voice note.")
+            text_to_speech_result = convert_text_to_speech(summary.news_original, summary.voice_tag, audio_file_path)
+            if not text_to_speech_result:
+                await update.message.reply_text("Failed to convert text to speech. Continuing without voice note.")
 
         # Step 4: Save files
         logger.info(f"Saving files with timestamp {timestamp}.")
@@ -122,18 +128,23 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         content_db.add_content(url, file_paths)
 
     # Step 5: Send files to operator
-    with open(file_paths['audio'], 'rb') as audio:
-        if text_to_speech_result:
-            # Format the reset date
-            reset_date = datetime.fromtimestamp(text_to_speech_result['next_reset_timestamp'], tz=timezone.utc).strftime("%Y-%m-%d")
-            
-            caption = (f"Used tokens: {text_to_speech_result['used_tokens']}\n"
-                       f"Remaining characters: {text_to_speech_result['remaining_characters']}\n"
-                       f"Next reset date: {reset_date}")
-            
-            await update.message.reply_voice(audio, caption=caption)
-        else:
-            await update.message.reply_voice(audio)
+    if file_paths['audio'] and os.path.exists(file_paths['audio']):
+        with open(file_paths['audio'], 'rb') as audio:
+            if text_to_speech_result:
+                # Format the reset date
+                reset_date = datetime.fromtimestamp(text_to_speech_result['next_reset_timestamp'], tz=timezone.utc).strftime("%Y-%m-%d")
+                
+                caption = (f"Used tokens: {text_to_speech_result['used_tokens']}\n"
+                           f"Remaining characters: {text_to_speech_result['remaining_characters']}\n"
+                           f"Next reset date: {reset_date}")
+                
+                await update.message.reply_voice(audio, caption=caption)
+            else:
+                await update.message.reply_voice(audio)
+    elif DISABLE_VOICE_NOTES:
+        await update.message.reply_text("Voice note generation is disabled.")
+    else:
+        await update.message.reply_text("Voice note is not available for this content.")
     
     with open(file_paths['transcript'], 'r', encoding='utf-8') as f:
         transcript = f.read()
