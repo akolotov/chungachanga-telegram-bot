@@ -69,11 +69,29 @@ class TelegramSender:
                 pass
 
             # If all files are accessible, proceed with sending
-            
-            # Send voice note if path is provided and file exists
-            if content.voice_note_path and os.path.exists(content.voice_note_path):
-                with open(content.voice_note_path, 'rb') as voice_note:
-                    await self.bot.send_voice(chat_id=self.channel_id, voice=InputFile(voice_note))
+
+            # Send transcript with URL
+            with open(content.transcript_path, 'r', encoding='utf-8') as transcript:
+                transcript_text = transcript.read()
+                escaped_transcript = escape_markdown(transcript_text, version=2)
+                escaped_url = escape_markdown(content.url, version=2)
+                await self.bot.send_message(
+                    chat_id=self.channel_id,
+                    text=f"{escaped_url}\n\n" \
+                         f"*Español:*\n||{escaped_transcript}||",
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    disable_web_page_preview=True
+                )
+
+            # Send translation
+            with open(content.translation_path, 'r', encoding='utf-8') as translation:
+                translation_text = translation.read()
+                escaped_translation = escape_markdown(translation_text, version=2)
+                await self.bot.send_message(
+                    chat_id=self.channel_id,
+                    text=f"*Ruso:*\n||{escaped_translation}||",
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
 
             # Send vocabulary if available
             if content.vocabulary:
@@ -86,27 +104,10 @@ class TelegramSender:
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
 
-            # Send transcript with URL
-            with open(content.transcript_path, 'r', encoding='utf-8') as transcript:
-                transcript_text = transcript.read()
-                escaped_transcript = escape_markdown(transcript_text, version=2)
-                escaped_url = escape_markdown(content.url, version=2)
-                await self.bot.send_message(
-                    chat_id=self.channel_id,
-                    text=f"{escaped_url}\n\n||{escaped_transcript}||",
-                    parse_mode=ParseMode.MARKDOWN_V2,
-                    disable_web_page_preview=True
-                )
-
-            # Send translation
-            with open(content.translation_path, 'r', encoding='utf-8') as translation:
-                translation_text = translation.read()
-                escaped_translation = escape_markdown(translation_text, version=2)
-                await self.bot.send_message(
-                    chat_id=self.channel_id,
-                    text=f"||{escaped_translation}||",
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
+            # Send voice note if path is provided and file exists
+            if content.voice_note_path and os.path.exists(content.voice_note_path):
+                with open(content.voice_note_path, 'rb') as voice_note:
+                    await self.bot.send_voice(chat_id=self.channel_id, voice=InputFile(voice_note))
 
             return True
 
