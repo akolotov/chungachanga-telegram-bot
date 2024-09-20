@@ -28,8 +28,10 @@ class ContentDB:
 
     def get_content(self, url: str) -> Optional[Dict[str, any]]:
         content = self.db.get(url)
-        if content and content.get("vocabulary"):
-            content["vocabulary"] = [VocabularyItem(**item) for item in content["vocabulary"]]
+        if content:
+            content = content.copy()  # Create a copy to avoid modifying the original
+            if content.get("vocabulary"):
+                content["vocabulary"] = [VocabularyItem(**item) for item in content["vocabulary"]]
         return content
 
     def url_exists(self, url: str) -> bool:
