@@ -16,7 +16,7 @@ def format_vocabulary(vocabulary):
         escaped_translation = escape_markdown(item.translation, version=2)
         vocabulary_items.append(f"{escaped_word} \\(_{escaped_translation}_\\)")
     
-    return ", ".join(vocabulary_items)
+    return ",\n".join(vocabulary_items)
 
 def trim_message(message, max_length=4096):
     """

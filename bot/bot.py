@@ -1,18 +1,22 @@
 import os
 import logging
+import asyncio
+from collections import defaultdict
+from typing import Dict, Any, List, Optional
+from dataclasses import dataclass
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.helpers import escape_markdown
 from telegram.constants import ParseMode
+from telegram.error import TelegramError
 from datetime import datetime, timezone
 
 # Import our custom modules
 from web_parser import parse_article
 from summarizer import summarize_article
 from text_to_speech import convert_text_to_speech
-from telegram_sender import send_telegram_messages, MessageContent
-from content_db import ContentDB
+from content_db import ContentDB, VocabularyItem
 from helper import format_vocabulary, trim_message
 
 # Configure logging
@@ -32,14 +36,27 @@ load_dotenv()
 # Get environment variables
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
+DISCUSSION_GROUP_ID = os.getenv("TELEGRAM_DISCUSSION_GROUP_ID")
 OPERATORS = os.getenv("TELEGRAM_OPERATORS", "").split(",")
 DISABLE_VOICE_NOTES = os.getenv("DISABLE_VOICE_NOTES", "false").lower() == "true"
 
 # Initialize ContentDB
 content_db = ContentDB(os.getenv("CONTENT_DB", os.path.join("data", "content_db.json")))
 
-# Dictionary to store the current MessageContent for each operator
-operator_content = {}
+@dataclass
+class OperatorMessageContext:
+    url: str
+    voice_note_path: str
+    transcript_path: str
+    translation_path: str
+    vocabulary: Optional[List[VocabularyItem]] = None
+    operator_chat_id: int = None
+    operator_message_id: int = None
+    job_name: str = None
+
+# Dictionary to store the current OperatorMessageContext for each operator
+operator_contexts: Dict[int, OperatorMessageContext] = {}
+channel_messages: Dict[int, Dict[int, Any]] = defaultdict(dict)
 
 def get_output_dir(content_type):
     """Get the output directory for a specific content type."""
@@ -52,12 +69,11 @@ def save_files(content, summary, audio_path, timestamp):
         'content': os.path.join(get_output_dir('content'), f"content_{timestamp}.txt"),
         'transcript': os.path.join(get_output_dir('transcript'), f"transcript_{timestamp}.txt"),
         'translation': os.path.join(get_output_dir('translation'), f"translation_{timestamp}.txt"),
-        'audio': audio_path if audio_path else ""  # Set to empty string if no audio path
+        'audio': audio_path if audio_path else ""
     }
 
-    # Create directories only for non-empty paths
     for key, path in file_paths.items():
-        if path:  # Only create directory if path is not empty
+        if path:
             dir_path = os.path.dirname(path)
             os.makedirs(dir_path, exist_ok=True)
 
@@ -72,15 +88,16 @@ def save_files(content, summary, audio_path, timestamp):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /start is issued."""
-    if str(update.effective_user.id) not in OPERATORS:
+    user_id = update.effective_user.id
+    if str(user_id) not in OPERATORS:
         return
     await update.message.reply_text('Welcome! Send me a URL to process.')
 
 async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Process the URL sent by the operator."""
-    user_id = str(update.effective_user.id)
+    user_id = update.effective_user.id
     
-    if user_id not in OPERATORS:
+    if str(user_id) not in OPERATORS:
         return
 
     url = update.message.text
@@ -123,6 +140,7 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"Sending a request to ElevenLabs to create a voice note.")
             text_to_speech_result = convert_text_to_speech(summary.news_original, summary.voice_tag, audio_file_path)
             if not text_to_speech_result:
+                audio_file_path = ""
                 await update.message.reply_text("Failed to convert text to speech. Continuing without voice note.")
 
         # Step 4: Save files
@@ -173,12 +191,13 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Translation:\n\n{f.read()}")
 
     # Store current content for this specific operator
-    operator_content[user_id] = MessageContent(
+    operator_contexts[user_id] = OperatorMessageContext(
         url=url,
         voice_note_path=file_paths['audio'],
         transcript_path=file_paths['transcript'],
         translation_path=file_paths['translation'],
-        vocabulary=vocabulary
+        vocabulary=vocabulary,
+        operator_chat_id=update.effective_chat.id
     )
 
     # Create inline keyboard for confirmation
@@ -190,42 +209,186 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text("Is this content OK to send to the channel?", reply_markup=reply_markup)
+    message = await update.message.reply_text("Is this content OK to send to the channel?", reply_markup=reply_markup)
+    operator_contexts[user_id].operator_message_id = message.message_id
 
 async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the operator's confirmation to send content to the channel."""
     query = update.callback_query
     await query.answer()
 
-    user_id = str(query.from_user.id)
+    user_id = query.from_user.id
     
-    if user_id not in OPERATORS:
+    if str(user_id) not in OPERATORS:
         return
 
-    if user_id not in operator_content or operator_content[user_id] is None:
+    if user_id not in operator_contexts or operator_contexts[user_id] is None:
         await query.edit_message_text("No content to send. Please process a URL first.")
         return
 
     if query.data == 'confirm_yes':
         bot = context.bot
-        logger.info(f"Sending content for content with URL: {operator_content[user_id].url} to the channel.")
-        success = await send_telegram_messages(bot, CHANNEL_ID, operator_content[user_id])
-        if success:
-            await query.edit_message_text("Content sent to the channel successfully.")
-        else:
+        operator_context = operator_contexts[user_id]
+
+        logger.info(f"Handling the confirmation for the context {operator_context.url}.")
+        
+        try:
+            # Send voice note if path is provided and file exists
+            if operator_context.voice_note_path and os.path.exists(operator_context.voice_note_path):
+            # Send voice note with vocabulary as caption
+                with open(operator_context.voice_note_path, 'rb') as voice_note:
+                    if operator_context.vocabulary:
+                        formatted_vocabulary = format_vocabulary(operator_context.vocabulary)
+                        vocabulary_message = f"Palabras para entender el audio:\n{formatted_vocabulary}"
+                        
+                        message = await bot.send_voice(
+                            chat_id=CHANNEL_ID,
+                            voice=InputFile(voice_note),
+                            caption=trim_message(vocabulary_message),
+                            parse_mode=ParseMode.MARKDOWN_V2
+                        )
+                    else:
+                        message = await bot.send_voice(
+                            chat_id=CHANNEL_ID,
+                            voice=InputFile(voice_note)
+                        )
+
+                    logger.info(f"Voice note sent to the channel.")
+            else:
+                # Send vocabulary if available
+                if operator_context.vocabulary:
+                    formatted_vocabulary = format_vocabulary(operator_context.vocabulary)
+                    vocabulary_message = f"Palabras para entender la noticia:\n{formatted_vocabulary}"
+                else:
+                    vocabulary_message = "DEBUG: No vocabulary available."
+                    
+                message = await bot.send_message(
+                    chat_id=CHANNEL_ID,
+                    text=trim_message(vocabulary_message),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+
+                logger.info(f"Only vocabulary sent to the channel.")
+            
+            # Store message content for later use
+            channel_messages[user_id][message.message_id] = operator_context
+            
+            # Schedule job to clear message data
+            job_name = f'clear_{user_id}_{message.message_id}'
+            operator_context.job_name = job_name
+            context.job_queue.run_once(clear_message_data, 60, data={'user_id': user_id, 'message_id': message.message_id}, name=job_name)
+            
+            await query.edit_message_text("Voice note sent to the channel. Waiting for it to appear in the discussion group...")
+        except TelegramError as e:
+            logger.error(f"Failed to send message to channel: {e}")
             await query.edit_message_text("Failed to send content to the channel.")
     else:
         await query.edit_message_text("Content not sent to the channel.")
 
     # Clear the content for this operator
-    operator_content[user_id] = None
+    operator_contexts[user_id] = None
+
     await query.message.reply_text("Send me another URL to process.")
 
+async def clear_message_data(context: ContextTypes.DEFAULT_TYPE):
+    user_id = context.job.data['user_id']
+    message_id = context.job.data['message_id']
+    if user_id in channel_messages:
+        channel_messages[user_id].pop(message_id, None)
+        if not channel_messages[user_id]:
+            channel_messages.pop(user_id, None)
+
+async def handle_forwarded_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+
+    discussion_group = await context.bot.get_chat(DISCUSSION_GROUP_ID)
+
+    logger.info(f"A forwarded message in {discussion_group.id} discovered.")
+
+    if message.chat.id != discussion_group.id:
+        return
+
+    channel = await context.bot.get_chat(CHANNEL_ID)
+
+    if (message.forward_origin and 
+        message.forward_origin.chat.id == channel.id):
+
+        logger.info(f"The message {message.forward_origin.message_id} was forwarded from the channel.")
+
+        for user_id, user_messages in list(channel_messages.items()):
+            for channel_message_id, operator_context in list(user_messages.items()):
+
+                if message.forward_origin.message_id == channel_message_id:
+                    await finish_confirmation_handling(context, message.message_id, operator_context)
+                    
+                    # Remove the processed message data
+                    channel_messages[user_id].pop(channel_message_id, None)
+                    if not channel_messages[user_id]:
+                        channel_messages.pop(user_id, None)
+                    
+                    # Cancel the job for clearing this message data
+                    if operator_context.job_name:
+                        current_jobs = context.job_queue.get_jobs_by_name(operator_context.job_name)
+                        for job in current_jobs:
+                            job.schedule_removal()
+                    
+                    return
+
+async def finish_confirmation_handling(context: ContextTypes.DEFAULT_TYPE, reply_to_message_id: int, operator_context: OperatorMessageContext):
+    try:
+        # Send transcription with URL
+        with open(operator_context.transcript_path, 'r', encoding='utf-8') as f:
+            transcript_text = f.read()
+        escaped_transcript = escape_markdown(transcript_text, version=2)
+        escaped_url = escape_markdown(operator_context.url, version=2)
+        await context.bot.send_message(
+            chat_id=DISCUSSION_GROUP_ID,
+            text=f"{escaped_url}\n\n*Español:*\n||{escaped_transcript}||",
+            reply_to_message_id=reply_to_message_id,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            disable_web_page_preview=True
+        )
+
+        logger.info(f"the transcription was sent to the discussion group.")
+
+        # Add a small delay
+        await asyncio.sleep(1)
+
+        # Send translation
+        with open(operator_context.translation_path, 'r', encoding='utf-8') as f:
+            translation_text = f.read()
+        escaped_translation = escape_markdown(translation_text, version=2)
+        await context.bot.send_message(
+            chat_id=DISCUSSION_GROUP_ID,
+            text=f"*Ruso:*\n||{escaped_translation}||",
+            reply_to_message_id=reply_to_message_id,
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+
+        logger.info(f"the translation was sent to the discussion group.")
+
+        # Update the message in the operator's chat
+        if operator_context.operator_chat_id and operator_context.operator_message_id:
+            await context.bot.edit_message_text(
+                chat_id=operator_context.operator_chat_id,
+                message_id=operator_context.operator_message_id,
+                text="Transcription and translation added successfully to the discussion group."
+            )
+
+    except TelegramError as e:
+        logger.error(f"Failed to send comments to discussion group: {e}")
+        if operator_context.operator_chat_id and operator_context.operator_message_id:
+            await context.bot.edit_message_text(
+                chat_id=operator_context.operator_chat_id,
+                message_id=operator_context.operator_message_id,
+                text="Failed to send comments to discussion group."
+            )
+
 def main():
-    """Start the bot."""
     application = Application.builder().token(BOT_TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.FORWARDED, handle_forwarded_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_url))
     application.add_handler(CallbackQueryHandler(handle_confirmation))
 
