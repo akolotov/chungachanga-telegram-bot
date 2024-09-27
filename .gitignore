@@ -6,3 +6,5 @@ data/translation/*
 data/content_db.json
 /*.py
 .env
+ollama*.json
+ollama*.yml
