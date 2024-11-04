@@ -3,6 +3,9 @@ import requests
 from bs4 import BeautifulSoup
 from typing import Tuple, Optional
 from dotenv import load_dotenv
+import logging
+
+logger = logging.getLogger(__name__)
 
 class WebParserError(Exception):
     """Custom exception for WebParser errors."""
@@ -30,10 +33,12 @@ class WebParser:
             WebParserError: If there's an error fetching the page.
         """
         try:
+            logger.info(f"Fetching page from {url}.")
             response = requests.get(url, headers=self.headers)
             response.raise_for_status()
             return response.content
         except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch page: {e}")
             raise WebParserError(f"Failed to fetch page: {e}")
 
     def parse_crc891_article(self, url: str) -> Tuple[str, str]:
@@ -51,6 +56,8 @@ class WebParser:
         """
         try:
             content = self.get_page_content(url)
+
+            logger.info("Parsing the page content.")
             soup = BeautifulSoup(content, 'html.parser')
 
             title = soup.find('h1', class_='post-title entry-title')
@@ -67,9 +74,12 @@ class WebParser:
 
             if not title_text or not content_text:
                 raise WebParserError("Failed to extract title or content")
+            
+            logger.info(f"Successfully parsed the article with title '{title_text}'.")
 
             return title_text, content_text
         except Exception as e:
+            logger.error(f"Error parsing article: {e}")
             raise WebParserError(f"Error parsing article: {e}")
 
 def parse_article(url: str) -> Tuple[Optional[str], Optional[str]]:
@@ -87,7 +97,6 @@ def parse_article(url: str) -> Tuple[Optional[str], Optional[str]]:
     try:
         return parser.parse_crc891_article(url)
     except WebParserError as e:
-        print(f"An error occurred while parsing the article: {e}")
         return None, None
 
 if __name__ == "__main__":

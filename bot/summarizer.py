@@ -4,6 +4,9 @@ from pydantic import BaseModel
 from typing import Literal, Optional, List
 from textwrap import dedent
 from dotenv import load_dotenv
+import logging
+
+logger = logging.getLogger(__name__)
 
 class VocabularyItem(BaseModel):
     word: str
@@ -26,6 +29,8 @@ class OpenAISummarizer:
         load_dotenv()
         self.api_key = os.getenv("OPENAI_API_KEY")
         self.model = os.getenv("OPENAI_MODEL", "gpt-4o-2024-08-06")
+
+        logger.info(f"Using OpenAI model {self.model}.")
 
         if not self.api_key:
             raise OpenAISummarizerError("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
@@ -82,6 +87,7 @@ If the news category does not clearly fit into the predefined tags, default to u
         """
 
         try:
+            logger.info(f"Sending a request to OpenAI to create a news summary.")
             completion = openai.OpenAI().beta.chat.completions.parse(
                 model=self.model,
                 messages=[
@@ -89,7 +95,7 @@ If the news category does not clearly fit into the predefined tags, default to u
                     {"role": "user", "content": article}
                 ],
                 temperature=1,  # Adjust for creativity vs. determinism
-                max_tokens=1000,    # Adjust based on expected output size
+                max_tokens=300,    # Adjust based on expected output size
                 response_format=NewsSummary,
             )
 
@@ -99,8 +105,10 @@ If the news category does not clearly fit into the predefined tags, default to u
             return response.parsed
 
         except openai.OpenAIError as oe:
+            logger.error(f"OpenAI API error: {str(oe)}")
             raise OpenAISummarizerError(f"OpenAI API error: {str(oe)}")
         except Exception as e:
+            logger.error(f"Unexpected error during summarization: {str(e)}")
             raise OpenAISummarizerError(f"Unexpected error during summarization: {str(e)}")
 
 def summarize_article(article: str) -> Optional[NewsSummary]:
@@ -119,7 +127,6 @@ def summarize_article(article: str) -> Optional[NewsSummary]:
     try:
         return summarizer.create_news_summary(article)
     except OpenAISummarizerError as e:
-        print(f"An error occurred while summarizing the article: {e}")
         return None
 
 if __name__ == "__main__":
