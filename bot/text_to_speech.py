@@ -1,11 +1,15 @@
 import os
+import logging
 from elevenlabs import VoiceSettings
 from elevenlabs.client import ElevenLabs
 from dotenv import load_dotenv
 from typing import Optional, Tuple, Dict, List
 import requests
 
-SAFETY_FACTOR = 1.5 # Coefficient to multiply text length for safety
+# Configure logging
+logger = logging.getLogger(__name__)
+
+SAFETY_FACTOR = 1.5  # Coefficient to multiply text length for safety
 
 load_dotenv()
 api_keys_str = os.getenv("ELEVENLABS_API_KEY", "")
@@ -27,6 +31,7 @@ class TextToSpeech:
             raise ElevenLabsError("No ElevenLabs API keys found. Please set the ELEVENLABS_API_KEY environment variable.")
         
         self.clients = [ElevenLabs(api_key=key) for key in self.api_keys]
+        logger.info(f"Initialized with {len(self.api_keys)} API keys")
         # Daniel, onwK4e9ZLuTAKqWW03F9
         # Sarah, EXAVITQu4vr4xnSDxMaL
         # Laura, FGY2WhTYpPnrIDTdsKH5
@@ -61,6 +66,7 @@ class TextToSpeech:
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
+            logger.info(f"Credit usage data: {data}")
 
             character_count = data.get('character_count', 0)
             character_limit = data.get('character_limit', 0)
@@ -71,6 +77,7 @@ class TextToSpeech:
             return remaining_characters, next_reset
 
         except requests.RequestException as e:
+            logger.error(f"Error fetching credit usage: {str(e)}")
             raise ElevenLabsError(f"Error fetching credit usage: {str(e)}")
 
     def select_api_key(self, text_length: int) -> Tuple[str, ElevenLabs, int]:
@@ -91,8 +98,10 @@ class TextToSpeech:
         for api_key, client in zip(self.api_keys, self.clients):
             remaining_characters, _ = self.get_credit_usage(api_key)
             if remaining_characters >= required_tokens:
+                logger.info(f"Selected API key {api_key[:8]}... with {remaining_characters} characters remaining")
                 return api_key, client, remaining_characters
 
+        logger.error("No API key with sufficient credits found")
         raise InsufficientCreditsError("Insufficient credits across all API keys.")
 
     def text_to_speech_file(self, text: str, voice: str, output_path: str) -> Optional[Dict[str, any]]:
@@ -116,10 +125,12 @@ class TextToSpeech:
         try:
             chosen_voice_id = self.voice_ids.get(voice.lower())
             if not chosen_voice_id:
+                logger.error(f"Invalid voice option: {voice}")
                 raise ElevenLabsError(f"Invalid voice option: {voice}. Choose 'male' or 'female'.")
 
             api_key, client, remaining_characters_before = self.select_api_key(len(text))
 
+            logger.info("Making API request to ElevenLabs")
             response = client.text_to_speech.convert(
                 voice_id=chosen_voice_id,
                 output_format="mp3_22050_32",
@@ -139,6 +150,7 @@ class TextToSpeech:
             output_dir = os.path.dirname(output_path)
             os.makedirs(output_dir, exist_ok=True)
 
+            logger.info(f"Saving audio file to {output_path}")
             with open(output_path, "wb") as f:
                 for chunk in response:
                     if chunk:
@@ -149,7 +161,8 @@ class TextToSpeech:
 
             # Calculate used tokens
             used_tokens = remaining_characters_before - remaining_characters
-
+            
+            logger.info(f"Text-to-speech conversion complete. Used {used_tokens} tokens")
             return {
                 "audio_path": output_path,
                 "remaining_characters": remaining_characters,
@@ -158,8 +171,10 @@ class TextToSpeech:
             }
 
         except InsufficientCreditsError as e:
+            logger.error(f"Insufficient credits error: {str(e)}")
             raise e
         except Exception as e:
+            logger.error(f"Error during text-to-speech conversion: {str(e)}")
             raise ElevenLabsError(f"Error during text-to-speech conversion: {str(e)}")
 
 def convert_text_to_speech(text: str, voice: str, output_path: str) -> Optional[Dict[str, any]]:
@@ -176,11 +191,12 @@ def convert_text_to_speech(text: str, voice: str, output_path: str) -> Optional[
                                   remaining characters, next reset timestamp, and used tokens,
                                   or None if conversion failed.
     """
+    logger.info(f"Starting text-to-speech conversion for voice: {voice}")
     tts = TextToSpeech()
     try:
         return tts.text_to_speech_file(text, voice, output_path)
     except (ElevenLabsError, InsufficientCreditsError) as e:
-        print(f"An error occurred during text-to-speech conversion: {e}")
+        logger.error(f"An error occurred during text-to-speech conversion: {e}")
         return None
 
 if __name__ == "__main__":
