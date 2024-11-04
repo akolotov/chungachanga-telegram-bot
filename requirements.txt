@@ -3,5 +3,5 @@ python-telegram-bot[job-queue]==21.5
 python-dotenv
 requests
 beautifulsoup4==4.12.3
-elevenlabs==1.7.0
-openai==1.45.0
+elevenlabs==1.12.1
+openai==1.53.1
