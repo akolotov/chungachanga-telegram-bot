@@ -30,7 +30,6 @@ class TextToSpeech:
         if not self.api_keys:
             raise ElevenLabsError("No ElevenLabs API keys found. Please set the ELEVENLABS_API_KEY environment variable.")
         
-        self.clients = [ElevenLabs(api_key=key) for key in self.api_keys]
         logger.info(f"Initialized with {len(self.api_keys)} API keys")
         # Daniel, onwK4e9ZLuTAKqWW03F9
         # Sarah, EXAVITQu4vr4xnSDxMaL
@@ -95,10 +94,11 @@ class TextToSpeech:
         """
         required_tokens = int(text_length * self.token_safety_factor)
 
-        for api_key, client in zip(self.api_keys, self.clients):
+        for api_key in self.api_keys:
             remaining_characters, _ = self.get_credit_usage(api_key)
             if remaining_characters >= required_tokens:
                 logger.info(f"Selected API key {api_key[:8]}... with {remaining_characters} characters remaining")
+                client = ElevenLabs(api_key=api_key)
                 return api_key, client, remaining_characters
 
         logger.error("No API key with sufficient credits found")
@@ -196,7 +196,6 @@ def convert_text_to_speech(text: str, voice: str, output_path: str) -> Optional[
     try:
         return tts.text_to_speech_file(text, voice, output_path)
     except (ElevenLabsError, InsufficientCreditsError) as e:
-        logger.error(f"An error occurred during text-to-speech conversion: {e}")
         return None
 
 if __name__ == "__main__":
