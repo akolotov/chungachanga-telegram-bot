@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 from elevenlabs import VoiceSettings
 from elevenlabs.client import ElevenLabs
@@ -10,9 +11,12 @@ import requests
 logger = logging.getLogger(__name__)
 
 SAFETY_FACTOR = 1.5  # Coefficient to multiply text length for safety
+DEFAULT_STATE_DIR = "data/state"
+DEFAULT_STATE_FILE = "tts.json"
 
 load_dotenv()
 api_keys_str = os.getenv("ELEVENLABS_API_KEY", "")
+rotate_method = os.getenv("ELEVENLABS_ROTATE_METHOD", "basic") # "basic" or "round-robin"
 
 class ElevenLabsError(Exception):
     """Custom exception for ElevenLabs API errors."""
@@ -25,12 +29,16 @@ class InsufficientCreditsError(ElevenLabsError):
 class TextToSpeech:
     """A class to handle text-to-speech conversion using ElevenLabs API with multiple API keys."""
 
-    def __init__(self):
+    def __init__(self, state_dir: str = DEFAULT_STATE_DIR, state_file: str = DEFAULT_STATE_FILE):
         self.api_keys = self._load_api_keys()
         if not self.api_keys:
             raise ElevenLabsError("No ElevenLabs API keys found. Please set the ELEVENLABS_API_KEY environment variable.")
         
-        logger.info(f"Initialized with {len(self.api_keys)} API keys")
+        self.rotate_method = rotate_method
+        
+        self.state_path = os.path.join(state_dir, state_file)
+        self.state = self._load_state()
+        
         # Daniel, onwK4e9ZLuTAKqWW03F9
         # Sarah, EXAVITQu4vr4xnSDxMaL
         # Laura, FGY2WhTYpPnrIDTdsKH5
@@ -41,9 +49,73 @@ class TextToSpeech:
         }
         self.token_safety_factor = SAFETY_FACTOR
 
-    def _load_api_keys(self) -> List[str]:
-        """Load API keys from environment variable."""
-        return [key.strip() for key in api_keys_str.split(",") if key.strip()]
+    def _load_api_keys(self) -> Dict[str, str]:
+        """
+        Load API keys from environment variable and create a circular linked list structure.
+        Returns a dict where each key points to the next key in rotation.
+        """
+        keys = [key.strip() for key in api_keys_str.split(",") if key.strip()]
+        if not keys:
+            return {}
+            
+        # Create circular linked list as a dictionary
+        api_keys = {}
+        for i in range(len(keys)):
+            api_keys[keys[i]] = keys[(i + 1) % len(keys)]
+            
+        logger.info(f"Created circular key chain with {len(api_keys)} keys")
+        return api_keys
+
+    def _load_state(self) -> Dict:
+        """Load the state from file or create default if it doesn't exist."""
+        os.makedirs(os.path.dirname(self.state_path), exist_ok=True)
+        
+        if os.path.exists(self.state_path):
+            try:
+                with open(self.state_path, 'r') as f:
+                    state = json.load(f)
+                    logger.info(f"The previous key was {state.get('last_key')[:8]}...")
+                    # Validate that the last_key exists in our api_keys
+                    if state.get("last_key") not in self.api_keys:
+                        logger.warning("Stored last_key not found in current API keys, resetting state")
+                        state["last_key"] = self._get_next_key()
+                    return state
+            except json.JSONDecodeError:
+                logger.warning("Failed to load state file, creating new state")
+        
+        # Default state - start with the first key
+        state = {}
+        state["last_key"] = self._get_next_key()
+        return state
+
+    def _save_state(self, state: Dict):
+        """Save the state to file."""
+        try:
+            with open(self.state_path, 'w') as f:
+                json.dump(state, f)
+        except Exception as e:
+            logger.error(f"Failed to save state: {e}")
+
+    def _update_key_state(self, key: str):
+        """Update the state with the new key and save it to file."""
+        if not hasattr(self, 'state'):
+            self.state = {}
+        self.state["last_key"] = key
+        self._save_state(self.state)
+
+    def _get_next_key(self) -> str:
+        """Get the next API key in the rotation."""
+        current_key = None if not hasattr(self, 'state') else self.state.get('last_key')
+        if not current_key or current_key not in self.api_keys:
+            # If current key is invalid, start with the first key
+            next_key = next(iter(self.api_keys)) if self.api_keys else None
+        else:
+            next_key = self.api_keys[current_key]
+        
+        # Update state
+        self._update_key_state(next_key)
+        
+        return next_key
 
     def get_credit_usage(self, api_key: str) -> Tuple[int, int]:
         """
@@ -62,10 +134,10 @@ class TextToSpeech:
         headers = {"xi-api-key": api_key}
 
         try:
+            logger.info(f"Checking credit usage for API key {api_key[:8]}...")
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
-            logger.info(f"Credit usage data: {data}")
 
             character_count = data.get('character_count', 0)
             character_limit = data.get('character_limit', 0)
@@ -81,25 +153,48 @@ class TextToSpeech:
 
     def select_api_key(self, text_length: int) -> Tuple[str, ElevenLabs, int]:
         """
-        Selects an appropriate API key based on the required text length.
+        Selects an API key based on the rotation method:
+        - 'round-robin': Rotates through all keys in sequence
+        - 'basic': Uses the current key until it runs out of tokens
 
         Args:
             text_length (int): The length of the text to be converted.
 
         Returns:
-            Tuple[str, ElevenLabs, int]: A tuple containing the selected API key, its corresponding client, and the remaining characters.
+            Tuple[str, ElevenLabs, int]: A tuple containing the selected API key, its client, and remaining characters.
 
         Raises:
             InsufficientCreditsError: If no API key has sufficient credits.
         """
         required_tokens = int(text_length * self.token_safety_factor)
+        keys_tried = set()
 
-        for api_key in self.api_keys:
-            remaining_characters, _ = self.get_credit_usage(api_key)
-            if remaining_characters >= required_tokens:
-                logger.info(f"Selected API key {api_key[:8]}... with {remaining_characters} characters remaining")
-                client = ElevenLabs(api_key=api_key)
-                return api_key, client, remaining_characters
+        if self.rotate_method == "basic":
+            current_key = self.state.get("last_key")
+        else:  # "round-robin"
+            current_key = self._get_next_key()
+
+        while len(keys_tried) < len(self.api_keys):
+            keys_tried.add(current_key)
+            
+            try:
+                remaining_characters, _ = self.get_credit_usage(current_key)
+                if remaining_characters >= required_tokens:
+                    logger.info(f"Selected API key {current_key[:8]}... with {remaining_characters} characters remaining")                        
+                    client = ElevenLabs(api_key=current_key)
+                    return current_key, client, remaining_characters
+                else:
+                    logger.warning(f"API key {current_key[:8]}... has only {remaining_characters} characters remaining")
+            except ElevenLabsError as e:
+                logger.warning(f"Error checking API key {current_key[:8]}...: {e}")
+            
+            # Move to next key based on rotation method
+            if self.rotate_method == "basic":
+                # Only move to next key if current one fails
+                current_key = self.api_keys[current_key]
+                self._update_key_state(current_key)
+            else:  # "round-robin"
+                current_key = self._get_next_key()
 
         logger.error("No API key with sufficient credits found")
         raise InsufficientCreditsError("Insufficient credits across all API keys.")
