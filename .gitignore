@@ -4,7 +4,9 @@ data/content/*
 data/transcript/*
 data/translation/*
 data/content_db.json
+data/state/*
 /*.py
 .env
 ollama*.json
 ollama*.yml
+.aider*
