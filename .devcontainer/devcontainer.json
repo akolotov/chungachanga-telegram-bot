@@ -19,6 +19,9 @@
 	},
 	// Allows to connect to services on the host machine (e.g Ollama) from inside the container.
 	// "runArgs": [ "--add-host=host.docker.internal:host-gateway"],
+	// To avoid git status to show the changes in case of uncommented mounts
+	// use `git update-index --assume-unchanged .devcontainer/devcontainer.json`
+	// and `git update-index --no-assume-unchanged .devcontainer/devcontainer.json` to revert
 	// "mounts": [
 	// 	"source=${localEnv:HOME}/.ssh/config,target=/home/vscode/.ssh/config,type=bind,consistency=cached",
 	// 	"source=${localEnv:HOME}/.ssh/id_rsa,target=/home/vscode/.ssh/id_rsa,type=bind,consistency=cached"
