@@ -66,8 +66,9 @@ To run the ChungaChanga Telegram Bot using Docker Compose, follow these steps:
     - `TELEGRAM_BOT_TOKEN`: Your Telegram Bot API token obtained from BotFather.
     - `TELEGRAM_CHANNEL_ID`: The ID of the Telegram channel where the bot will publish content.
     - `ELEVENLABS_API_KEY`: Your API key for ElevenLabs text-to-speech service.
-    - `OPENAI_API_KEY`: Your API key for OpenAI's GPT models.
-    - `OPENAI_MODEL`: The specific OpenAI model to use (default is "gpt-4o-2024-08-06").
+    - `AGENT_ENGINE`: The engine to use for summarization. Can be "gemini" or "openai".
+    - `AGENT_ENGINE_API_KEY`: Your API key for the selected engine.
+    - `AGENT_ENGINE_MODEL`: The specific model to use for the selected engine.
     - `TELEGRAM_OPERATORS`: Comma-separated list of Telegram user IDs authorized to operate the bot.
 
 3. Run the bot using Docker Compose:

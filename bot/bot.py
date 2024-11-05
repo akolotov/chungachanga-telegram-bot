@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 # Import our custom modules
 from web_parser import parse_article
-from summarizer import summarize_article
+from summary import summarize_article_by_gemini, summarize_article_by_openai
 from text_to_speech import convert_text_to_speech
 from content_db import ContentDB, VocabularyItem
 from helper import format_vocabulary, trim_message
@@ -39,6 +39,7 @@ CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
 DISCUSSION_GROUP_ID = os.getenv("TELEGRAM_DISCUSSION_GROUP_ID")
 OPERATORS = os.getenv("TELEGRAM_OPERATORS", "").split(",")
 DISABLE_VOICE_NOTES = os.getenv("DISABLE_VOICE_NOTES", "false").lower() == "true"
+AGENT_ENGINE = os.getenv("AGENT_ENGINE", "gemini").lower()
 
 # Initialize ContentDB
 content_db = ContentDB(os.getenv("CONTENT_DB", os.path.join("data", "content_db.json")))
@@ -122,8 +123,13 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # Step 2: Summarize the article
-        logger.info(f"Handling the article with OpenAI.")
-        summary = summarize_article(content)
+        if AGENT_ENGINE == "gemini":    
+            logger.info(f"Handling the article with Gemini.")
+            summary = summarize_article_by_gemini(content)
+        else:
+            # AGENT_ENGINE == "openai"
+            logger.info(f"Handling the article with OpenAI.")
+            summary = summarize_article_by_openai(content)
         if not summary:
             await update.message.reply_text("Failed to summarize the article. Please try another URL.")
             return

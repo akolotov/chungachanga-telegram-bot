@@ -1,4 +1,5 @@
 bot/__pycache__/
+bot/**/__pycache__/
 *.pyc
 data/*
 .devcontainer/*
