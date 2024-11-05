@@ -3,6 +3,7 @@
 This Telegram bot is designed to automate the process of curating and distributing news content, with the primary goal of helping non-Spanish speakers improve their Spanish listening and reading skills. It transforms large text news articles into concise summaries, making them more accessible for language learners.
 
 Key features:
+
 - The bot accepts URLs of Spanish news articles from authorized operators.
 - It processes each article by summarizing it into 3-4 sentences, making it easier for learners to digest.
 - The summary is converted to speech, allowing users to practice their listening skills with native pronunciation.
@@ -27,15 +28,15 @@ sequenceDiagram
     actor Operator
     participant Bot
     participant NewsWebServer
-    participant OpenAI_API
+    participant LLM_API
     participant ElevenLabs_API
     participant TelegramChannel
 
     Operator->>Bot: Send URL
     Bot->>NewsWebServer: Request article
     NewsWebServer-->>Bot: Return article content
-    Bot->>OpenAI_API: Send content for summarization
-    OpenAI_API-->>Bot: Return summary
+    Bot->>LLM_API: Send content for summarization
+    LLM_API-->>Bot: Return summary
     Bot->>ElevenLabs_API: Send summary for text-to-speech
     ElevenLabs_API-->>Bot: Return audio file
     Bot->>Operator: Send processed content for review
@@ -52,13 +53,14 @@ To run the ChungaChanga Telegram Bot using Docker Compose, follow these steps:
 1. Copy the `docker-compose.yml` file to your local machine.
 
 2. Create a `.env` file in the same directory as your `docker-compose.yml` file with the following variables:
-   
-    ```
+
+    ```shell
     TELEGRAM_BOT_TOKEN=your_telegram_bot_token
     TELEGRAM_CHANNEL_ID=your_telegram_channel_id
     ELEVENLABS_API_KEY=your_elevenlabs_api_key
-    OPENAI_API_KEY=your_openai_api_key
-    OPENAI_MODEL=gpt-4-1106-preview
+    AGENT_ENGINE=gemini
+    AGENT_ENGINE_API_KEY=your_gemini_api_key
+    AGENT_ENGINE_MODEL=gemini-1.5-flash-002
     TELEGRAM_OPERATORS=operator1_id,operator2_id
     ```
 
@@ -72,7 +74,7 @@ To run the ChungaChanga Telegram Bot using Docker Compose, follow these steps:
     - `TELEGRAM_OPERATORS`: Comma-separated list of Telegram user IDs authorized to operate the bot.
 
 3. Run the bot using Docker Compose:
-    ```
+
+    ```shell
     docker compose up -d
     ```
-
