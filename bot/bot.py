@@ -4,7 +4,6 @@ import asyncio
 from collections import defaultdict
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
-from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.helpers import escape_markdown
@@ -18,6 +17,7 @@ from summary import summarize_article_by_gemini, summarize_article_by_openai
 from text_to_speech import convert_text_to_speech
 from content_db import ContentDB, VocabularyItem
 from helper import format_vocabulary, trim_message
+from settings import settings, AgentEngine
 
 # Configure logging
 logging.basicConfig(
@@ -30,19 +30,8 @@ logger = logging.getLogger(__name__)
 # Silence specific loggers
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# Load environment variables
-load_dotenv()
-
-# Get environment variables
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
-DISCUSSION_GROUP_ID = os.getenv("TELEGRAM_DISCUSSION_GROUP_ID")
-OPERATORS = os.getenv("TELEGRAM_OPERATORS", "").split(",")
-DISABLE_VOICE_NOTES = os.getenv("DISABLE_VOICE_NOTES", "false").lower() == "true"
-AGENT_ENGINE = os.getenv("AGENT_ENGINE", "gemini").lower()
-
 # Initialize ContentDB
-content_db = ContentDB(os.getenv("CONTENT_DB", os.path.join("data", "content_db.json")))
+content_db = ContentDB(settings.content_db)
 
 @dataclass
 class OperatorMessageContext:
@@ -59,17 +48,12 @@ class OperatorMessageContext:
 operator_contexts: Dict[int, OperatorMessageContext] = {}
 channel_messages: Dict[int, Dict[int, Any]] = defaultdict(dict)
 
-def get_output_dir(content_type):
-    """Get the output directory for a specific content type."""
-    env_var = f"{content_type.upper()}_OUTPUT_DIR"
-    return os.getenv(env_var, os.path.join("data", content_type))
-
 def save_files(content, summary, audio_path, timestamp):
     """Save content, transcript, translation, and audio files."""
     file_paths = {
-        'content': os.path.join(get_output_dir('content'), f"content_{timestamp}.txt"),
-        'transcript': os.path.join(get_output_dir('transcript'), f"transcript_{timestamp}.txt"),
-        'translation': os.path.join(get_output_dir('translation'), f"translation_{timestamp}.txt"),
+        'content': os.path.join(settings.content_output_dir, f"content_{timestamp}.txt"),
+        'transcript': os.path.join(settings.transcript_output_dir, f"transcript_{timestamp}.txt"),
+        'translation': os.path.join(settings.translation_output_dir, f"translation_{timestamp}.txt"),
         'audio': audio_path if audio_path else ""
     }
 
@@ -90,7 +74,7 @@ def save_files(content, summary, audio_path, timestamp):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /start is issued."""
     user_id = update.effective_user.id
-    if str(user_id) not in OPERATORS:
+    if str(user_id) not in settings.get_telegram_operators():
         return
     await update.message.reply_text('Welcome! Send me a URL to process.')
 
@@ -98,7 +82,7 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Process the URL sent by the operator."""
     user_id = update.effective_user.id
     
-    if str(user_id) not in OPERATORS:
+    if str(user_id) not in settings.get_telegram_operators():
         return
 
     url = update.message.text
@@ -123,11 +107,11 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # Step 2: Summarize the article
-        if AGENT_ENGINE == "gemini":    
+        if settings.agent_engine == AgentEngine.GEMINI:
             logger.info(f"Handling the article with Gemini.")
             summary = summarize_article_by_gemini(content)
         else:
-            # AGENT_ENGINE == "openai"
+            # settings.agent_engine == AgentEngine.OPENAI
             logger.info(f"Handling the article with OpenAI.")
             summary = summarize_article_by_openai(content)
         if not summary:
@@ -139,8 +123,8 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Step 3: Convert summary to speech (if enabled)
         audio_file_path = ""
         text_to_speech_result = None
-        if not DISABLE_VOICE_NOTES:
-            audio_output_dir = get_output_dir('audio')
+        if not settings.disable_voice_notes:
+            audio_output_dir = settings.audio_output_dir
             os.makedirs(audio_output_dir, exist_ok=True)
             audio_file_path = os.path.join(audio_output_dir, f"audio_{timestamp}.mp3")
             logger.info(f"Sending a request to ElevenLabs to create a voice note.")
@@ -181,7 +165,7 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_voice(audio, caption=caption)
             else:
                 await update.message.reply_voice(audio)
-    elif DISABLE_VOICE_NOTES:
+    elif settings.disable_voice_notes:
         await update.message.reply_text("Voice note generation is disabled.")
     else:
         await update.message.reply_text("Voice note is not available for this content.")
@@ -225,7 +209,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     user_id = query.from_user.id
     
-    if str(user_id) not in OPERATORS:
+    if str(user_id) not in settings.get_telegram_operators():
         return
 
     if user_id not in operator_contexts or operator_contexts[user_id] is None:
@@ -248,14 +232,14 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                         vocabulary_message = f"Palabras para entender el audio:\n{formatted_vocabulary}"
                         
                         message = await bot.send_voice(
-                            chat_id=CHANNEL_ID,
+                            chat_id=settings.telegram_channel_id,
                             voice=InputFile(voice_note),
                             caption=trim_message(vocabulary_message),
                             parse_mode=ParseMode.MARKDOWN_V2
                         )
                     else:
                         message = await bot.send_voice(
-                            chat_id=CHANNEL_ID,
+                            chat_id=settings.telegram_channel_id,
                             voice=InputFile(voice_note)
                         )
 
@@ -269,7 +253,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                     vocabulary_message = "DEBUG: No vocabulary available."
                     
                 message = await bot.send_message(
-                    chat_id=CHANNEL_ID,
+                    chat_id=settings.telegram_channel_id,
                     text=trim_message(vocabulary_message),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
@@ -307,14 +291,14 @@ async def clear_message_data(context: ContextTypes.DEFAULT_TYPE):
 async def handle_forwarded_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
 
-    discussion_group = await context.bot.get_chat(DISCUSSION_GROUP_ID)
+    discussion_group = await context.bot.get_chat(settings.telegram_discussion_group_id)
 
     logger.info(f"A forwarded message in {discussion_group.id} discovered.")
 
     if message.chat.id != discussion_group.id:
         return
 
-    channel = await context.bot.get_chat(CHANNEL_ID)
+    channel = await context.bot.get_chat(settings.telegram_channel_id)
 
     if (message.forward_origin and 
         message.forward_origin.chat.id == channel.id):
@@ -348,7 +332,7 @@ async def finish_confirmation_handling(context: ContextTypes.DEFAULT_TYPE, reply
         escaped_transcript = escape_markdown(transcript_text, version=2)
         escaped_url = escape_markdown(operator_context.url, version=2)
         await context.bot.send_message(
-            chat_id=DISCUSSION_GROUP_ID,
+            chat_id=settings.telegram_discussion_group_id,
             text=f"{escaped_url}\n\n*Español:*\n||{escaped_transcript}||",
             reply_to_message_id=reply_to_message_id,
             parse_mode=ParseMode.MARKDOWN_V2,
@@ -365,7 +349,7 @@ async def finish_confirmation_handling(context: ContextTypes.DEFAULT_TYPE, reply
             translation_text = f.read()
         escaped_translation = escape_markdown(translation_text, version=2)
         await context.bot.send_message(
-            chat_id=DISCUSSION_GROUP_ID,
+            chat_id=settings.telegram_discussion_group_id,
             text=f"*Ruso:*\n||{escaped_translation}||",
             reply_to_message_id=reply_to_message_id,
             parse_mode=ParseMode.MARKDOWN_V2
@@ -391,7 +375,12 @@ async def finish_confirmation_handling(context: ContextTypes.DEFAULT_TYPE, reply
             )
 
 def main():
-    application = Application.builder().token(BOT_TOKEN).build()
+    print(settings.get_telegram_operators())
+    print(settings.telegram_bot_token)
+    print(settings.telegram_channel_id)
+    print(settings.telegram_discussion_group_id)
+
+    application = Application.builder().token(settings.telegram_bot_token).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.FORWARDED, handle_forwarded_message))

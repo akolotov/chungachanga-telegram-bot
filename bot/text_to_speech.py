@@ -3,9 +3,9 @@ import json
 import logging
 from elevenlabs import VoiceSettings
 from elevenlabs.client import ElevenLabs
-from dotenv import load_dotenv
 from typing import Optional, Tuple, Dict, List
 import requests
+from settings import settings, ElevenLabsRotateMethod
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -13,10 +13,6 @@ logger = logging.getLogger(__name__)
 SAFETY_FACTOR = 1.5  # Coefficient to multiply text length for safety
 DEFAULT_STATE_DIR = "data/state"
 DEFAULT_STATE_FILE = "tts.json"
-
-load_dotenv()
-api_keys_str = os.getenv("ELEVENLABS_API_KEY", "")
-rotate_method = os.getenv("ELEVENLABS_ROTATE_METHOD", "basic") # "basic" or "round-robin"
 
 class ElevenLabsError(Exception):
     """Custom exception for ElevenLabs API errors."""
@@ -34,7 +30,7 @@ class TextToSpeech:
         if not self.api_keys:
             raise ElevenLabsError("No ElevenLabs API keys found. Please set the ELEVENLABS_API_KEY environment variable.")
         
-        self.rotate_method = rotate_method
+        self.rotate_method = settings.elevenlabs_rotate_method
         
         self.state_path = os.path.join(state_dir, state_file)
         self.state = self._load_state()
@@ -54,7 +50,7 @@ class TextToSpeech:
         Load API keys from environment variable and create a circular linked list structure.
         Returns a dict where each key points to the next key in rotation.
         """
-        keys = [key.strip() for key in api_keys_str.split(",") if key.strip()]
+        keys = settings.get_elevenlabs_api_keys()
         if not keys:
             return {}
             
@@ -154,8 +150,8 @@ class TextToSpeech:
     def select_api_key(self, text_length: int) -> Tuple[str, ElevenLabs, int]:
         """
         Selects an API key based on the rotation method:
-        - 'round-robin': Rotates through all keys in sequence
-        - 'basic': Uses the current key until it runs out of tokens
+        - `ElevenLabsRotateMethod.ROUND_ROBIN`: Rotates through all keys in sequence
+        - `ElevenLabsRotateMethod.BASIC`: Uses the current key until it runs out of tokens
 
         Args:
             text_length (int): The length of the text to be converted.
@@ -169,9 +165,9 @@ class TextToSpeech:
         required_tokens = int(text_length * self.token_safety_factor)
         keys_tried = set()
 
-        if self.rotate_method == "basic":
+        if self.rotate_method == ElevenLabsRotateMethod.BASIC:
             current_key = self.state.get("last_key")
-        else:  # "round-robin"
+        else:  # ElevenLabsRotateMethod.ROUND_ROBIN
             current_key = self._get_next_key()
 
         while len(keys_tried) < len(self.api_keys):
@@ -189,11 +185,11 @@ class TextToSpeech:
                 logger.warning(f"Error checking API key {current_key[:8]}...: {e}")
             
             # Move to next key based on rotation method
-            if self.rotate_method == "basic":
+            if self.rotate_method == ElevenLabsRotateMethod.BASIC:
                 # Only move to next key if current one fails
                 current_key = self.api_keys[current_key]
                 self._update_key_state(current_key)
-            else:  # "round-robin"
+            else:  # ElevenLabsRotateMethod.ROUND_ROBIN
                 current_key = self._get_next_key()
 
         logger.error("No API key with sufficient credits found")

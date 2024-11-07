@@ -4,8 +4,8 @@ from typing import Optional
 from textwrap import dedent
 from ...models import NewsSummary
 from .prompts import system_prompt, news_article_example
-from dotenv import load_dotenv
 import logging
+from settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +17,11 @@ class OpenAISummarizer:
     """A class to summarize news articles using OpenAI API."""
 
     def __init__(self):
-        load_dotenv()
-        api_key = os.getenv("AGENT_ENGINE_API_KEY")
+        api_key = settings.agent_engine_api_key
         if not api_key:
             raise OpenAISummarizerError("OpenAI API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")
 
-        self.model_name = os.getenv("AGENT_ENGINE_MODEL", "gpt-4o-2024-08-06")
+        self.model_name = settings.agent_engine_model
         logger.info(f"Using OpenAI model {self.model_name}.")
 
         self.model = openai.OpenAI(api_key=api_key)

@@ -1,9 +1,9 @@
-import os
 import requests
 from bs4 import BeautifulSoup
 from typing import Tuple, Optional
 from dotenv import load_dotenv
 import logging
+from settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -100,11 +100,8 @@ def parse_article(url: str) -> Tuple[Optional[str], Optional[str]]:
         return None, None
 
 if __name__ == "__main__":
-    load_dotenv()
-    url = os.getenv('URL_LINK')
-
-    if url:
-        title, content = parse_article(url)
+    if len(settings.url_link) > 0:
+        title, content = parse_article(settings.url_link)
         if title and content:
             print(f"\nTitle: {title}\n\nContent:\n{content}")
         else:

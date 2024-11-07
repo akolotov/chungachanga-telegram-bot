@@ -1,7 +1,5 @@
-import os
 import google.generativeai as genai
 from google.ai.generativelanguage_v1beta.types import content
-from dotenv import load_dotenv
 from ...models import NewsContent
 from .prompts import system_prompt_deacronymizer as system_prompt
 from .prompts import news_article_example, news_summary_example
@@ -9,6 +7,7 @@ import logging
 import json
 from .base import BaseChatModel
 from .exceptions import GeminiDeacronymizerError
+from settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -75,16 +74,13 @@ if __name__ == "__main__":
         handlers=[logging.StreamHandler()]
     )
 
-    load_dotenv()
-    api_key = os.getenv("AGENT_ENGINE_API_KEY")
+    api_key = settings.agent_engine_api_key
     if not api_key:
         raise GeminiDeacronymizerError("Gemini API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")
 
-    model_name = os.getenv("AGENT_ENGINE_MODEL", "gemini-1.5-flash-002")
-
     genai.configure(api_key=api_key)
 
-    deacronymizer = Deacronymizer(model_name)
+    deacronymizer = Deacronymizer(settings.agent_engine_model)
     sanitized_summary = deacronymizer.sanitize(
         NewsContent(
             original_article=news_article_example,

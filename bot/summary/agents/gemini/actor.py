@@ -1,6 +1,4 @@
-import os
 import google.generativeai as genai
-from dotenv import load_dotenv
 from .summarizer import Summarizer
 from .deacronymizer import Deacronymizer
 from .educator import Educator
@@ -8,24 +6,22 @@ from .exceptions import GeminiBaseError
 from ...models import NewsContent, NewsSummary
 import logging
 from .prompts import news_article_example
+from settings import settings
 
 logger = logging.getLogger(__name__)
 
 def summarize_article(article: str) -> NewsSummary:
-    load_dotenv()
-    api_key = os.getenv("AGENT_ENGINE_API_KEY")
+    api_key = settings.agent_engine_api_key
     if not api_key:
         raise GeminiBaseError("Gemini API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")
-
-    model_name = os.getenv("AGENT_ENGINE_MODEL", "gemini-1.5-flash-002")
 
     genai.configure(api_key=api_key)
 
     try:
-        summarizer = Summarizer(model_name)
+        summarizer = Summarizer(settings.agent_engine_model)
         minimal_summary = summarizer.generate(article)
 
-        deacronymizer = Deacronymizer(model_name)
+        deacronymizer = Deacronymizer(settings.agent_engine_model)
         news_summary = deacronymizer.sanitize(
             NewsContent(
                 original_article=article,
@@ -33,7 +29,7 @@ def summarize_article(article: str) -> NewsSummary:
             )
         )
 
-        educator = Educator(model_name)
+        educator = Educator(settings.agent_engine_model)
         translated_summary = educator.translate(
             NewsContent(
                 original_article=article,

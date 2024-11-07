@@ -8,6 +8,7 @@ from telegram.error import TelegramError
 from telegram.helpers import escape_markdown
 from dotenv import load_dotenv
 from helper import format_vocabulary, trim_message
+from settings import settings
 
 @dataclass
 class MessageContent:
@@ -141,16 +142,12 @@ if __name__ == "__main__":
 
     # Example usage
     from telegram import Bot
-    
-    # Get environment variables
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    channel_id = os.getenv("TELEGRAM_CHANNEL_ID")
-    
-    if not bot_token or not channel_id:
+        
+    if not settings.telegram_bot_token or not settings.telegram_channel_id:
         raise ValueError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID must be set in the .env file")
     
     # Initialize the bot object
-    bot = Bot(token=bot_token)
+    bot = Bot(token=settings.telegram_bot_token)
     
     content = MessageContent(
         url="https://example.com/article",
@@ -160,7 +157,7 @@ if __name__ == "__main__":
     )
     
     async def main():
-        success = await send_telegram_messages(bot, channel_id, content)
+        success = await send_telegram_messages(bot, settings.telegram_channel_id, content)
         if success:
             print("All messages sent successfully to Telegram channel.")
         else:
