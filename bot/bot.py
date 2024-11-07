@@ -375,11 +375,6 @@ async def finish_confirmation_handling(context: ContextTypes.DEFAULT_TYPE, reply
             )
 
 def main():
-    print(settings.get_telegram_operators())
-    print(settings.telegram_bot_token)
-    print(settings.telegram_channel_id)
-    print(settings.telegram_discussion_group_id)
-
     application = Application.builder().token(settings.telegram_bot_token).build()
 
     application.add_handler(CommandHandler("start", start))
