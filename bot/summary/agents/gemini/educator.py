@@ -73,7 +73,7 @@ class Educator(BaseChatModel):
             language="Russian"
         )
 
-        super().__init__(model_name, 0.2, formatted_system_prompt, educating_item_schema, max_tokens=1000)
+        super().__init__(model_name, 0.2, formatted_system_prompt, educating_item_schema, max_tokens=1500)
     
     def translate(self, news_content: NewsContent) -> NewsSummary:
         logger.info(f"Sending a request to Gemini to translate a news article.")
