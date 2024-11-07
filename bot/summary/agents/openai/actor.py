@@ -2,7 +2,7 @@ import os
 import openai
 from typing import Optional
 from textwrap import dedent
-from ..models import NewsSummary
+from ...models import NewsSummary
 from .prompts import system_prompt, news_article_example
 from dotenv import load_dotenv
 import logging
