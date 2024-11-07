@@ -239,7 +239,7 @@ class TextToSpeech:
                     style=0.0,
                     use_speaker_boost=True,
                 ),
-                apply_text_normalization=True
+                apply_text_normalization="on"
             )
 
             # Ensure the directory exists
