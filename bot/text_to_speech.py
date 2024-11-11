@@ -5,7 +5,8 @@ from elevenlabs import VoiceSettings
 from elevenlabs.client import ElevenLabs
 from typing import Optional, Tuple, Dict, List
 import requests
-from settings import settings, ElevenLabsRotateMethod
+
+from bot.settings import settings, ElevenLabsRotateMethod
 
 # Configure logging
 logger = logging.getLogger(__name__)

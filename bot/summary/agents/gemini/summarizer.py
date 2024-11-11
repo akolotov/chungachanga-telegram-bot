@@ -1,13 +1,14 @@
 import google.generativeai as genai
 from google.ai.generativelanguage_v1beta.types import content
-from ...models import MinimalNewsSummary
-from .prompts import system_prompt_summarizer as system_prompt
-from .prompts import news_article_example
 import logging
 import json
-from .base import BaseChatModel
-from .exceptions import GeminiSummarizerError
-from settings import settings
+
+from ...models import MinimalNewsSummary, ResponseError
+from .prompts import system_prompt_summarizer as system_prompt
+from .prompts import news_article_example
+from .base import BaseChatModel, ChatModelConfig
+from .exceptions import GeminiSummarizerError, GeminiUnexpectedFinishReason
+from bot.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +34,26 @@ news_summary_schema = content.Schema(
 class Summarizer(BaseChatModel):
     """A class to summarize news articles using Google Gemini API."""
 
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, session_id: str = ""):
         logger.info(f"Using Gemini model {model_name}.")
-        super().__init__(model_name, 1.0, system_prompt, news_summary_schema)
+
+        model_config = ChatModelConfig(
+            session_id=session_id,
+            agent_id="summarizer",
+            llm_model_name=model_name,
+            temperature=1.0,
+            system_prompt=system_prompt,
+            response_schema=news_summary_schema
+        )
+        super().__init__(model_config)
     
-    def generate(self, news_article: str) -> MinimalNewsSummary:
+    def generate(self, news_article: str) -> MinimalNewsSummary | ResponseError:
         logger.info(f"Sending a request to Gemini to create a news summary.")
 
         try:
             json_str = self._generate_response(news_article)
+        except GeminiUnexpectedFinishReason as e:
+            return ResponseError(error=f"LLM engine responded with: {e}")
         except Exception as e:
             logger.error(f"Failed to generate response: {e}")
             raise GeminiSummarizerError(f"Failed to generate response: {e}")
@@ -76,9 +88,9 @@ if __name__ == "__main__":
     summarizer = Summarizer(settings.agent_engine_model)
     summary = summarizer.generate(news_article_example)
 
-    if summary:
+    if isinstance(summary, ResponseError):
+        print(f"Error: {summary.error}")
+    else:
         print("Summary Created Successfully!")
         print(f"Voice Tag: {summary.voice_tag}")
         print(f"Spanish Summary: {summary.news_original}")
-    else:
-        print("Failed to create summary.")

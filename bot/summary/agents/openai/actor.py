@@ -1,11 +1,11 @@
-import os
 import openai
 from typing import Optional
 from textwrap import dedent
+import logging
+
 from ...models import NewsSummary
 from .prompts import system_prompt, news_article_example
-import logging
-from settings import settings
+from bot.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class OpenAISummarizer:
             logger.error(f"Unexpected error during summarization: {str(e)}")
             raise OpenAISummarizerError(f"Unexpected error during summarization: {str(e)}")
 
-def summarize_article(article: str) -> Optional[NewsSummary]:
+def summarize_article(article: str, _session_id: str = "") -> Optional[NewsSummary]:
     """
     Summarizes a news article using the OpenAISummarizer.
 

@@ -3,8 +3,9 @@ import unicodedata
 from difflib import SequenceMatcher
 import jellyfish
 from cyrtranslit import to_latin
-from ...models import EducatingVocabularyItem, VocabularyItem
 import logging
+
+from ...models import EducatingVocabularyItem, VocabularyItem
 
 logger = logging.getLogger(__name__)
 

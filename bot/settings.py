@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     agent_engine: AgentEngine = Field(default=AgentEngine.GEMINI, env="AGENT_ENGINE")
     agent_engine_api_key: str = Field(default="", env="AGENT_ENGINE_API_KEY")
     agent_engine_model: str = Field(default="gemini-1.5-flash-002", env="AGENT_ENGINE_MODEL")
+    keep_raw_engine_responses: bool = Field(default=False, env="KEEP_RAW_ENGINE_RESPONSES")
+    raw_engine_responses_dir: str = Field(default=os.path.join("data", "responses"), env="RAW_ENGINE_RESPONSES_DIR")
     elevenlabs_api_key: str = Field(efault="", env="ELEVENLABS_API_KEY")
     elevenlabs_rotate_method: ElevenLabsRotateMethod = Field(default=ElevenLabsRotateMethod.BASIC, env="ELEVENLABS_ROTATE_METHOD")
     audio_output_dir: str = Field(default=os.path.join("data", "audio"), env="AUDIO_OUTPUT_DIR")

@@ -2,6 +2,8 @@
 from pydantic import BaseModel
 from typing import Literal, List
 
+class ResponseError(BaseModel):
+    error: str
 
 class MinimalNewsSummary(BaseModel):
     voice_tag: Literal['male', 'female']

@@ -3,7 +3,8 @@ from bs4 import BeautifulSoup
 from typing import Tuple, Optional
 from dotenv import load_dotenv
 import logging
-from settings import settings
+
+from bot.settings import settings
 
 logger = logging.getLogger(__name__)
 

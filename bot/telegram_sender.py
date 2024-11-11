@@ -7,8 +7,9 @@ from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from telegram.helpers import escape_markdown
 from dotenv import load_dotenv
-from helper import format_vocabulary, trim_message
-from settings import settings
+
+from bot.helper import format_vocabulary, trim_message
+from bot.settings import settings
 
 @dataclass
 class MessageContent:

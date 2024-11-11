@@ -5,6 +5,7 @@ data/transcript/*
 data/translation/*
 data/content_db.json
 data/state/*
+data/responses/*
 /*.py
 .env
 ollama*.json

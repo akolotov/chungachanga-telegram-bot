@@ -12,12 +12,12 @@ from telegram.error import TelegramError
 from datetime import datetime, timezone
 
 # Import our custom modules
-from web_parser import parse_article
-from summary import summarize_article_by_gemini, summarize_article_by_openai
-from text_to_speech import convert_text_to_speech
-from content_db import ContentDB, VocabularyItem
-from helper import format_vocabulary, trim_message
-from settings import settings, AgentEngine
+from bot.web_parser import parse_article
+from bot.summary import summarize_article_by_gemini, summarize_article_by_openai, ResponseError
+from bot.text_to_speech import convert_text_to_speech
+from bot.content_db import ContentDB, VocabularyItem
+from bot.helper import format_vocabulary, trim_message
+from bot.settings import settings, AgentEngine
 
 # Configure logging
 logging.basicConfig(
@@ -109,13 +109,14 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Step 2: Summarize the article
         if settings.agent_engine == AgentEngine.GEMINI:
             logger.info(f"Handling the article with Gemini.")
-            summary = summarize_article_by_gemini(content)
+            summary = summarize_article_by_gemini(content, session_id=timestamp)
         else:
             # settings.agent_engine == AgentEngine.OPENAI
             logger.info(f"Handling the article with OpenAI.")
-            summary = summarize_article_by_openai(content)
-        if not summary:
-            await update.message.reply_text("Failed to summarize the article. Please try another URL.")
+            summary = summarize_article_by_openai(content, session_id=timestamp)
+        
+        if isinstance(summary, ResponseError):
+            await update.message.reply_text(f"Failed to summarize the article. Error: '{summary.error}'. Please try another URL.")
             return
 
         vocabulary = summary.vocabulary
