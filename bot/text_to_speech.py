@@ -22,18 +22,138 @@ class InsufficientCreditsError(ElevenLabsError):
     """Exception raised when there are insufficient credits across all API keys."""
     pass
 
+class APIKeys:
+    """A class to handle API keys for ElevenLabs."""
+
+    def __init__(self, state_dir: str, state_file: str):
+        self._api_keys = self._load_api_keys()
+
+        self._rotate_method = settings.elevenlabs_rotate_method
+        
+        self._state_path = os.path.join(state_dir, state_file)
+
+        self._last_used_key = self._load_last_used_key()
+
+    def _load_api_keys(self) -> Dict[str, str]:
+        """
+        Load API keys from environment variable and create a circular linked list structure.
+        Returns a dict where each key points to the next key in rotation.
+        """
+        keys = settings.get_elevenlabs_api_keys()
+        if not keys:
+            raise ElevenLabsError("No ElevenLabs API keys found. Please set the ELEVENLABS_API_KEY environment variable.")
+            
+        # Create circular linked list as a dictionary
+        api_keys = {}
+        for i in range(len(keys)):
+            api_keys[keys[i]] = keys[(i + 1) % len(keys)]
+            
+        logger.info(f"Created circular key chain with {len(api_keys)} keys")
+        return api_keys
+
+    def _load_last_used_key(self) -> Dict:
+        """Load the state from file or create default if it doesn't exist."""
+        os.makedirs(os.path.dirname(self._state_path), exist_ok=True)
+        
+        if os.path.exists(self._state_path):
+            try:
+                with open(self._state_path, 'r') as f:
+                    state = json.load(f)
+                    last_key = state.get("last_key")
+                    logger.info(f"The previous key was {last_key[:8]}...")
+                    # Validate that the last_key exists in our api_keys
+                    if last_key not in self._api_keys:
+                        logger.warning("Stored last_key not found in current API keys, choosing a new one")
+                        last_key = self._rotate_key()
+                    return last_key
+            except json.JSONDecodeError:
+                logger.warning("Failed to load state file, creating new state")
+        
+        # Default - start with the first key
+        return self._rotate_key()
+
+    def _save_state(self):
+        """Save the state to file."""
+        state = {"last_key": self._last_used_key}
+        try:
+            with open(self._state_path, 'w') as f:
+                json.dump(state, f)
+        except Exception as e:
+            logger.error(f"Failed to save state: {e}")
+
+    def _update_last_used_key(self, key: str):
+        """Update the state with the new key and save it to file."""
+        self._last_used_key = key
+        self._save_state()
+
+    def _rotate_key(self) -> str:
+        """Get the next API key in the rotation."""
+        current_key = None if not hasattr(self, '_last_used_key') else self._last_used_key
+        if not current_key or current_key not in self._api_keys:
+            # If current key is invalid, start with the first key
+            next_key = next(iter(self._api_keys)) if self._api_keys else None
+        else:
+            next_key = self._api_keys[current_key]
+        
+        # Update state
+        self._update_last_used_key(next_key)
+        
+        return next_key
+    
+    def get_initial_key(self) -> str:
+        if self._rotate_method == ElevenLabsRotateMethod.BASIC:
+            return self._last_used_key
+        else:  # ElevenLabsRotateMethod.ROUND_ROBIN
+            return self._rotate_key()
+        
+    def get_next_key(self) -> str:
+        return self._rotate_key()
+
+class TTSClient:
+    """A class to handle text-to-speech conversion using ElevenLabs API with multiple API keys."""
+
+    def __init__(self, state_dir: str, state_file: str):
+        self._api_keys = APIKeys(state_dir, state_file)
+
+    def _get_credit_usage(self, api_key: str) -> Tuple[int, int]:
+        """
+        Requests the current amount of used credits for a specific API key.
+
+        Args:
+            api_key (str): The API key to check.
+
+        Returns:
+            Tuple[int, int]: A tuple containing (remaining_characters, next_reset_timestamp)
+
+        Raises:
+            ElevenLabsError: If there's an error during the API request.
+        """
+        url = "https://api.elevenlabs.io/v1/user/subscription"
+        headers = {"xi-api-key": api_key}
+
+        try:
+            logger.info(f"Checking credit usage for API key {api_key[:8]}...")
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+            character_count = data.get('character_count', 0)
+            character_limit = data.get('character_limit', 0)
+            next_reset = data.get('next_character_count_reset_unix', 0)
+
+            remaining_characters = character_limit - character_count
+
+            return remaining_characters, next_reset
+
+        except requests.RequestException as e:
+            logger.error(f"Error fetching credit usage: {str(e)}")
+            raise ElevenLabsError(f"Error fetching credit usage: {str(e)}")        
+
 class TextToSpeech:
     """A class to handle text-to-speech conversion using ElevenLabs API with multiple API keys."""
 
     def __init__(self, state_dir: str = DEFAULT_STATE_DIR, state_file: str = DEFAULT_STATE_FILE):
-        self.api_keys = self._load_api_keys()
-        if not self.api_keys:
-            raise ElevenLabsError("No ElevenLabs API keys found. Please set the ELEVENLABS_API_KEY environment variable.")
-        
-        self.rotate_method = settings.elevenlabs_rotate_method
-        
-        self.state_path = os.path.join(state_dir, state_file)
-        self.state = self._load_state()
+        self._api_keys = APIKeys(state_dir, state_file)
         
         # Daniel, onwK4e9ZLuTAKqWW03F9
         # Sarah, EXAVITQu4vr4xnSDxMaL
@@ -45,75 +165,7 @@ class TextToSpeech:
         }
         self.token_safety_factor = SAFETY_FACTOR
 
-    def _load_api_keys(self) -> Dict[str, str]:
-        """
-        Load API keys from environment variable and create a circular linked list structure.
-        Returns a dict where each key points to the next key in rotation.
-        """
-        keys = settings.get_elevenlabs_api_keys()
-        if not keys:
-            return {}
-            
-        # Create circular linked list as a dictionary
-        api_keys = {}
-        for i in range(len(keys)):
-            api_keys[keys[i]] = keys[(i + 1) % len(keys)]
-            
-        logger.info(f"Created circular key chain with {len(api_keys)} keys")
-        return api_keys
-
-    def _load_state(self) -> Dict:
-        """Load the state from file or create default if it doesn't exist."""
-        os.makedirs(os.path.dirname(self.state_path), exist_ok=True)
-        
-        if os.path.exists(self.state_path):
-            try:
-                with open(self.state_path, 'r') as f:
-                    state = json.load(f)
-                    logger.info(f"The previous key was {state.get('last_key')[:8]}...")
-                    # Validate that the last_key exists in our api_keys
-                    if state.get("last_key") not in self.api_keys:
-                        logger.warning("Stored last_key not found in current API keys, resetting state")
-                        state["last_key"] = self._get_next_key()
-                    return state
-            except json.JSONDecodeError:
-                logger.warning("Failed to load state file, creating new state")
-        
-        # Default state - start with the first key
-        state = {}
-        state["last_key"] = self._get_next_key()
-        return state
-
-    def _save_state(self, state: Dict):
-        """Save the state to file."""
-        try:
-            with open(self.state_path, 'w') as f:
-                json.dump(state, f)
-        except Exception as e:
-            logger.error(f"Failed to save state: {e}")
-
-    def _update_key_state(self, key: str):
-        """Update the state with the new key and save it to file."""
-        if not hasattr(self, 'state'):
-            self.state = {}
-        self.state["last_key"] = key
-        self._save_state(self.state)
-
-    def _get_next_key(self) -> str:
-        """Get the next API key in the rotation."""
-        current_key = None if not hasattr(self, 'state') else self.state.get('last_key')
-        if not current_key or current_key not in self.api_keys:
-            # If current key is invalid, start with the first key
-            next_key = next(iter(self.api_keys)) if self.api_keys else None
-        else:
-            next_key = self.api_keys[current_key]
-        
-        # Update state
-        self._update_key_state(next_key)
-        
-        return next_key
-
-    def get_credit_usage(self, api_key: str) -> Tuple[int, int]:
+    def _get_credit_usage(self, api_key: str) -> Tuple[int, int]:
         """
         Requests the current amount of used credits for a specific API key.
 
@@ -147,9 +199,9 @@ class TextToSpeech:
             logger.error(f"Error fetching credit usage: {str(e)}")
             raise ElevenLabsError(f"Error fetching credit usage: {str(e)}")
 
-    def select_api_key(self, text_length: int) -> Tuple[str, ElevenLabs, int]:
+    def _get_available_client(self, text_length: int) -> Tuple[ElevenLabs, int]:
         """
-        Selects an API key based on the rotation method:
+        Selects an API client based on the rotation method:
         - `ElevenLabsRotateMethod.ROUND_ROBIN`: Rotates through all keys in sequence
         - `ElevenLabsRotateMethod.BASIC`: Uses the current key until it runs out of tokens
 
@@ -157,7 +209,7 @@ class TextToSpeech:
             text_length (int): The length of the text to be converted.
 
         Returns:
-            Tuple[str, ElevenLabs, int]: A tuple containing the selected API key, its client, and remaining characters.
+            Tuple[ElevenLabs, int]: A tuple containing the selected client and remaining characters.
 
         Raises:
             InsufficientCreditsError: If no API key has sufficient credits.
@@ -174,11 +226,11 @@ class TextToSpeech:
             keys_tried.add(current_key)
             
             try:
-                remaining_characters, _ = self.get_credit_usage(current_key)
+                remaining_characters, _ = self._get_credit_usage(current_key)
                 if remaining_characters >= required_tokens:
                     logger.info(f"Selected API key {current_key[:8]}... with {remaining_characters} characters remaining")                        
                     client = ElevenLabs(api_key=current_key)
-                    return current_key, client, remaining_characters
+                    return client, remaining_characters
                 else:
                     logger.warning(f"API key {current_key[:8]}... has only {remaining_characters} characters remaining")
             except ElevenLabsError as e:
@@ -219,7 +271,7 @@ class TextToSpeech:
                 logger.error(f"Invalid voice option: {voice}")
                 raise ElevenLabsError(f"Invalid voice option: {voice}. Choose 'male' or 'female'.")
 
-            api_key, client, remaining_characters_before = self.select_api_key(len(text))
+            client, remaining_characters_before = self._get_available_client(len(text))
 
             logger.info("Making API request to ElevenLabs")
             response = client.text_to_speech.convert(
@@ -249,7 +301,7 @@ class TextToSpeech:
                         f.write(chunk)
 
             # Get credit usage after conversion
-            remaining_characters, next_reset = self.get_credit_usage(api_key)
+            remaining_characters, next_reset = self._get_credit_usage(client.api_key)
 
             # Calculate used tokens
             used_tokens = remaining_characters_before - remaining_characters
