@@ -2,6 +2,7 @@ import google.generativeai as genai
 from google.ai.generativelanguage_v1beta.types import content
 import logging
 import json
+from typing import Union
 
 from ...models import NewsContent, ResponseError
 from .prompts import system_prompt_deacronymizer as system_prompt
@@ -57,7 +58,7 @@ class Deacronymizer(BaseChatModel):
         )
         super().__init__(model_config)
     
-    def sanitize(self, news_content: NewsContent) -> str:
+    def sanitize(self, news_content: NewsContent) -> Union[str, ResponseError]:
         logger.info(f"Sending a request to Gemini to deacronymize a news article.")
 
         try:

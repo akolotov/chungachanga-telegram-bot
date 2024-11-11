@@ -2,6 +2,7 @@ import google.generativeai as genai
 from google.ai.generativelanguage_v1beta.types import content
 import logging
 import json
+from typing import Union
 
 from ...models import NewsContent, EducatingVocabularyItem, NewsSummary, ResponseError
 from .prompts import system_prompt_educator as system_prompt
@@ -85,7 +86,7 @@ class Educator(BaseChatModel):
         )
         super().__init__(model_config)
     
-    def translate(self, news_content: NewsContent) -> NewsSummary:
+    def translate(self, news_content: NewsContent) -> Union[NewsSummary, ResponseError]:
         logger.info(f"Sending a request to Gemini to translate a news article.")
 
         try:

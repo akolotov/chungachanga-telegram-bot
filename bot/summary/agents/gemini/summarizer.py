@@ -2,6 +2,7 @@ import google.generativeai as genai
 from google.ai.generativelanguage_v1beta.types import content
 import logging
 import json
+from typing import Union
 
 from ...models import MinimalNewsSummary, ResponseError
 from .prompts import system_prompt_summarizer as system_prompt
@@ -47,7 +48,7 @@ class Summarizer(BaseChatModel):
         )
         super().__init__(model_config)
     
-    def generate(self, news_article: str) -> MinimalNewsSummary | ResponseError:
+    def generate(self, news_article: str) -> Union[MinimalNewsSummary, ResponseError]:
         logger.info(f"Sending a request to Gemini to create a news summary.")
 
         try:

@@ -1,6 +1,7 @@
 from datetime import datetime
 import google.generativeai as genai
 import logging
+from typing import Union
 
 from .summarizer import Summarizer
 from .deacronymizer import Deacronymizer
@@ -12,7 +13,7 @@ from bot.settings import settings
 
 logger = logging.getLogger(__name__)
 
-def summarize_article(article: str, session_id: str = "") -> NewsSummary | ResponseError:
+def summarize_article(article: str, session_id: str = "") -> Union[NewsSummary, ResponseError]:
     api_key = settings.agent_engine_api_key
     if not api_key:
         raise GeminiBaseError("Gemini API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")
