@@ -78,3 +78,17 @@ To run the ChungaChanga Telegram Bot using Docker Compose, follow these steps:
     ```shell
     docker compose up -d
     ```
+
+## Screenshots
+
+1. After inserting a link to the bot, it prepares all the artifacts and waits for confirmation to send them to the dedicated Telegram channel.
+2. The channel contains only audio notes with a list of words essential for understanding the particular news.
+3. There are comments associated with the message containing the audio notes, so the transcript of the news in Spanish and its translation are available there but intentionally hidden. A tap on the hidden text will reveal the content.
+
+| 1 | 2 | 3 |
+|:----:|:----:|:----:|
+| ![image](https://github.com/user-attachments/assets/ec113929-ba4c-445e-8ba1-4b1a50df4552) | ![image](https://github.com/user-attachments/assets/42dbc045-d4e0-4969-82df-42ea75b39909) | ![image](https://github.com/user-attachments/assets/3ca36226-e507-4a98-a67d-a8536424a126) |
+
+## License
+
+The code (and LLM prompts) in this project is licensed under the Creative Commons BY-NC-SA 4.0 License. See [LICENSE](LICENSE.md) file for details.
