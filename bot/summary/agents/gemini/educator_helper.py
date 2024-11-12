@@ -10,26 +10,68 @@ from ...models import EducatingVocabularyItem, VocabularyItem
 logger = logging.getLogger(__name__)
 
 def _normalize_string(s: str) -> str:
-    """Remove accents and convert to lowercase."""
+    """Normalize a string by removing accents and converting to lowercase.
+    
+    Args:
+        s (str): The input string to normalize.
+    
+    Returns:
+        str: The normalized string with accents removed and converted to lowercase.
+    """
     return ''.join(
         c for c in unicodedata.normalize('NFD', s.lower())
         if unicodedata.category(c) != 'Mn'
     )
 
 def _is_similar_basic(s1: str, s2: str, threshold: float = 0.65) -> bool:
-    """Check similarity using SequenceMatcher."""
+    """Compare two strings for similarity using SequenceMatcher.
+    
+    Args:
+        s1 (str): First string to compare.
+        s2 (str): Second string to compare.
+        threshold (float, optional): Minimum similarity ratio to consider strings similar. Defaults to 0.65.
+    
+    Returns:
+        bool: True if strings are similar above the threshold, False otherwise.
+    """
     s1_norm = _normalize_string(s1)
     s2_norm = _normalize_string(s2)
     similarity = SequenceMatcher(None, s1_norm, s2_norm).ratio()
     return similarity >= threshold
 
 def _is_similar_jellyfish(s1: str, s2: str, threshold: float = 0.65) -> bool:
+    """Compare two strings for similarity using Jaro-Winkler distance.
+    
+    Args:
+        s1 (str): First string to compare.
+        s2 (str): Second string to compare.
+        threshold (float, optional): Minimum similarity ratio to consider strings similar. Defaults to 0.65.
+    
+    Returns:
+        bool: True if strings are similar above the threshold, False otherwise.
+    """
     s1_norm = _normalize_string(s1)
     s2_norm = _normalize_string(s2)
     similarity = jellyfish.jaro_winkler_similarity(s1_norm, s2_norm)
     return similarity >= threshold
 
 def filter_vocabulary(vocabulary: List[EducatingVocabularyItem], similarity_threshold: float = 0.65) -> List[VocabularyItem]:
+    """Filter and prioritize vocabulary items based on similarity, CEFR level, and importance.
+    
+    This function performs several operations:
+    1. Transliterates Russian translations and synonyms to Latin script
+    2. Checks for similarity between original words and their transliterations
+    3. Filters out words that are too similar to their translations
+    4. Prioritizes words based on CEFR level (C2 to A1) and importance (high to low)
+    5. Returns up to 3 most relevant vocabulary items
+    
+    Args:
+        vocabulary (List[EducatingVocabularyItem]): List of vocabulary items to filter.
+        similarity_threshold (float, optional): Threshold for word similarity comparison. Defaults to 0.65.
+    
+    Returns:
+        List[VocabularyItem]: Filtered list of up to 3 vocabulary items, prioritized by level and importance.
+    """
     vocabulary_items = {}
 
     for word in vocabulary:

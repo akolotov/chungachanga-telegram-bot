@@ -66,13 +66,39 @@ educating_item_schema = content.Schema(
 )
 
 class Educator(BaseChatModel):
-    """A class to educate news articles using Google Gemini API."""
+    """Gemini-powered agent that processes Spanish news content for language learners.
+    
+    This class extends BaseChatModel to provide educational content processing, including:
+    - Translation of Spanish news summaries to the target language
+    - Identification and translation of key vocabulary
+    - CEFR level assessment of Spanish words
+    - Generation of synonyms for translations
+    
+    The agent uses a structured prompt to ensure consistent output formatting and
+    leverages the Gemini model's capabilities for language understanding and generation.
+    
+    Attributes:
+        target_language (str): The language to translate content into (e.g., "Russian")
+    """
 
-    def __init__(self, model_name: str, session_id: str = ""):
+    def __init__(self, model_name: str, session_id: str, target_language: str = "Russian"):
+        """Initialize the Educator agent with specific configuration.
+        
+        Args:
+            model_name (str): Name of the Gemini model to use
+            session_id (str): Unique identifier to track agents' responses belong to the same session
+            target_language (str, optional): Target language for translations. Defaults to "Russian"
+        
+        The initialization:
+        1. Sets up the response schema for structured output
+        2. Configures the system prompt with the target language
+        3. Initializes the base chat model with the specified configuration
+        """
+
         logger.info(f"Using Gemini model {model_name}.")
 
         formatted_system_prompt = system_prompt.format(
-            language="Russian"
+            language=target_language
         )
 
         model_config = ChatModelConfig(
@@ -87,6 +113,26 @@ class Educator(BaseChatModel):
         super().__init__(model_config)
     
     def translate(self, news_content: NewsContent) -> Union[NewsSummary, ResponseError]:
+        """Process and translate news content for language learners.
+        
+        This method takes Spanish news content and:
+        1. Identifies key vocabulary words
+        2. Assesses CEFR levels for Spanish words
+        3. Provides translations and synonyms
+        4. Translates the full summary
+        
+        Args:
+            news_content (NewsContent): Object containing original article and summary in Spanish
+        
+        Returns:
+            NewsSummary: Processed content including translations, vocabulary, and analysis
+            ResponseError: If there's an error in model generation
+        
+        Raises:
+            GeminiModelError: If there's an error in model generation
+            GeminiUnexpectedFinishReason: If the model stops generation unexpectedly
+        """
+
         logger.info(f"Sending a request to Gemini to translate a news article.")
 
         try:

@@ -43,9 +43,27 @@ deacronymized_item_schema = content.Schema(
 )
 
 class Deacronymizer(BaseChatModel):
-    """A class to deacronymize news articles using Google Gemini API."""
+    """A class for converting acronyms in Spanish news summaries to their full forms.
+
+    This class uses the Gemini model to identify and expand acronyms in news summaries,
+    making them more accessible to non-native Spanish speakers. It inherits from BaseChatModel
+    and uses the system prompt defined in prompts.py.
+
+    The class processes NewsContent objects and returns DeacronymizedItem objects
+    containing the identified acronyms, their full forms, and the updated summary.
+
+    Attributes:
+        Inherits all attributes from BaseChatModel
+    """
 
     def __init__(self, model_name: str, session_id: str = ""):
+        """Initialize the Deacronymizer with configuration for acronym processing.
+
+        Args:
+            model_name (str): Name of the Gemini model to use
+            session_id (str): Unique identifier to track agents' responses belong to the same session
+        """
+        
         logger.info(f"Using Gemini model {model_name}.")
         model_config = ChatModelConfig(
             session_id=session_id,
@@ -59,6 +77,27 @@ class Deacronymizer(BaseChatModel):
         super().__init__(model_config)
     
     def sanitize(self, news_content: NewsContent) -> Union[str, ResponseError]:
+        """Process a news summary to expand all acronyms to their full forms.
+
+        Takes a NewsContent object containing the original article and its summary,
+        identifies any acronyms present, and returns a DeacronymizedItem with the
+        expanded version of the summary and details about the identified acronyms.
+
+        Args:
+            news_content (NewsContent): Object containing the original article and its summary,
+                both in Spanish.
+
+        Returns:
+            DeacronymizedItem: Object containing:
+                - chain_of_thought: Analysis of identified acronyms
+                - acronyms: List of identified acronyms and their full forms
+                - summary: Updated text with acronyms replaced by full forms
+
+        Raises:
+            GeminiModelError: If there is an error in generating the response
+            GeminiUnexpectedFinishReason: If the model stops generation for an unexpected reason
+        """
+
         logger.info(f"Sending a request to Gemini to deacronymize a news article.")
 
         try:

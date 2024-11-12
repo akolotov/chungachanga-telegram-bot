@@ -33,9 +33,32 @@ news_summary_schema = content.Schema(
 )
 
 class Summarizer(BaseChatModel):
-    """A class to summarize news articles using Google Gemini API."""
+    """A specialized chat model for summarizing news articles in Spanish.
+    
+    This class extends BaseChatModel to create concise, easy-to-understand news announcements
+    targeted at non-native Spanish speakers. It processes news articles to create ~20-second
+    summaries suitable for radio broadcasting, assigns appropriate voice tags, and ensures
+    B1-level Spanish language complexity.
+
+    The summarizer follows specific guidelines for content creation:
+    - Uses B1 level Spanish (CEFR scale)
+    - Limits summaries to 3 sentences
+    - Avoids complex terminology and idioms
+    - Maintains cultural sensitivity
+    - Assigns male/female voice tags based on news category
+
+    Inherits from:
+        BaseChatModel: Base class for Gemini model interactions
+    """
 
     def __init__(self, model_name: str, session_id: str = ""):
+        """Initialize the Summarizer with specific configuration for news summarization.
+
+        Args:
+            model_name (str): Name of the Gemini model to use
+            session_id (str): Unique identifier to track agents' responses belong to the same session
+        """
+
         logger.info(f"Using Gemini model {model_name}.")
 
         model_config = ChatModelConfig(

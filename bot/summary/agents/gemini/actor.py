@@ -14,6 +14,39 @@ from bot.settings import settings
 logger = logging.getLogger(__name__)
 
 def summarize_article(article: str, session_id: str = "") -> Union[NewsSummary, ResponseError]:
+    """Process a Spanish news article through a multi-stage pipeline to create an educational summary.
+
+    This function orchestrates a three-stage process:
+    1. Summarization: Converts the full article into a concise B1-level Spanish summary
+    2. Deacronymization: Expands any acronyms in the summary to their full forms
+    3. Educational Processing: Translates the summary and provides vocabulary assistance
+
+    Args:
+        article (str): The original Spanish news article text to be processed
+        session_id (str): Unique identifier to track related agent responses belonging to the same session
+
+    Returns:
+        Union[NewsSummary, ResponseError]: Either a NewsSummary object containing:
+            - voice_tag (Literal['male', 'female']): Gender tag for TTS
+            - news_original (str): Original Spanish summary
+            - news_translated (str): Translated summary in target language
+            - vocabulary (List[VocabularyItem]): Key vocabulary with translations
+        Or a ResponseError if any stage fails.
+
+    Raises:
+        GeminiBaseError: If an unexpected error occurs during the summarization process
+
+    Example:
+        >>> result = summarize_article(
+        ...     article="Un largo artículo de noticias...",
+        ...     target_language="Russian",
+        ...     session_id="unique_session_123"
+        ... )
+        >>> if isinstance(result, NewsSummary):
+        ...     print(f"Summary created: {result.news_translated}")
+        ... else:
+        ...     print(f"Error: {result.error}")
+    """
     api_key = settings.agent_engine_api_key
     if not api_key:
         raise GeminiBaseError("Gemini API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")

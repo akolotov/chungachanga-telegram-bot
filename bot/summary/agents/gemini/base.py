@@ -95,7 +95,15 @@ class BaseChatModel:
     """Base class for interacting with Google's Gemini chat models.
     
     This class provides core functionality for configuring and interacting with
-    Gemini models, including handling chat history and generating responses.
+    Gemini models, including:
+    - Model initialization with customizable configuration (temperature, tokens, etc.)
+    - Response schema validation and JSON formatting
+    - Chat history tracking
+    - Response logging and debugging capabilities
+    - System prompt configuration
+    
+    The class is designed to be extended by specialized chat agents that implement
+    specific use cases like summarization, translation, etc.
     """
 
     def __init__(self, config: ChatModelConfig):
@@ -127,7 +135,15 @@ class BaseChatModel:
         self._agent_id = config.agent_id
 
     def _save_response(self, response: dict):
-        """Save the response to a file."""
+        """Save the raw response from the Gemini model to a file for debugging/logging purposes.
+        
+        If enabled via settings, saves the complete model response to a timestamped file
+        in a directory structure organized by session ID. The agent_id is included in the 
+        filename to distinguish responses from different agents within the same session.
+
+        Args:
+            response (dict): The raw response dictionary from the Gemini model
+        """
         
         if settings.keep_raw_engine_responses:
             response_dir = os.path.join(settings.raw_engine_responses_dir, self._session_id)
@@ -143,7 +159,9 @@ class BaseChatModel:
         """Generate a response from the model based on the given prompt.
 
         The prompt is added to the conversation history before generating the response.
-        The response is also added to the history for context in future interactions.
+        The response is also added to the history for context in future interactions,
+        but only if generation is successful (finishes with STOP reason).
+        If there's an error or unexpected finish reason, the prompt is removed from history.
 
         Args:
             prompt (str): The input text to send to the model
@@ -153,6 +171,7 @@ class BaseChatModel:
 
         Raises:
             GeminiModelError: If there is an error generating the response
+            GeminiUnexpectedFinishReason: If the model stops for an unexpected reason
         """
 
         logger = logging.getLogger(self.__class__.__module__)
