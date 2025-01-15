@@ -3,7 +3,7 @@ import google.generativeai as genai
 import logging
 from typing import Union
 
-from .summarizer import Summarizer
+from .summary_router import SummaryRouter
 from .deacronymizer import Deacronymizer
 from .educator import Educator
 from .exceptions import GeminiBaseError
@@ -17,7 +17,7 @@ def summarize_article(article: str, session_id: str = "") -> Union[NewsSummary, 
     """Process a Spanish news article through a multi-stage pipeline to create an educational summary.
 
     This function orchestrates a three-stage process:
-    1. Summarization: Converts the full article into a concise B1-level Spanish summary
+    1. Summarization & Verification: Creates and verifies a concise B1-level Spanish summary
     2. Deacronymization: Expands any acronyms in the summary to their full forms
     3. Educational Processing: Translates the summary and provides vocabulary assistance
 
@@ -56,8 +56,9 @@ def summarize_article(article: str, session_id: str = "") -> Union[NewsSummary, 
     try:
         if not session_id:
             session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        summarizer = Summarizer(settings.agent_engine_model, session_id)
-        minimal_summary = summarizer.generate(article)
+        
+        router = SummaryRouter(settings.agent_engine_model, session_id)
+        minimal_summary = router.process(article)
         if isinstance(minimal_summary, ResponseError):
             return minimal_summary
 

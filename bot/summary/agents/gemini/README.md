@@ -4,9 +4,11 @@ A multi-agent system that processes Spanish news articles to create educational 
 
 ## Main Functionality
 
-The pipeline processes news articles through three stages:
+The pipeline processes news articles through four stages:
 
-1. **Summarization**: Creates a B1-level Spanish summary optimized for ~20-second radio broadcasts
+1. **Summarization & Verification**: 
+   - Creates a B1-level Spanish summary optimized for ~20-second radio broadcasts
+   - Verifies summary quality and makes adjustments if needed
 2. **Deacronymization**: Expands acronyms and abbreviations for better comprehension
 3. **Educational Enhancement**: Adds translations and key vocabulary with CEFR levels
 
@@ -56,6 +58,17 @@ class BaseChatModel:
 
 ### 2. Agent Pipeline
 
+#### Summary Router
+
+```python
+class SummaryRouter:
+    """Orchestrates the summarization and verification process:
+    - Generates initial B1-level summary
+    - Verifies summary quality
+    - Applies adjustments if needed
+    """
+```
+
 #### Summarizer Agent
 
 ```python
@@ -64,6 +77,17 @@ class Summarizer(BaseChatModel):
     - 3-sentence limit
     - Voice tag assignment (male/female)
     - Cultural sensitivity checks
+    """
+```
+
+#### Summary Verifier Agent
+
+```python
+class SummaryVerifier(BaseChatModel):
+    """Verifies and adjusts summaries:
+    - Checks content accuracy
+    - Ensures B1 language level
+    - Suggests and applies improvements
     """
 ```
 
@@ -97,9 +121,9 @@ The `summarize_article` function in `actor.py` orchestrates the pipeline:
 ```python
 def summarize_article(article: str, session_id: str = "") -> Union[NewsSummary, ResponseError]:
     """
-    1. Initializes agents with session tracking
-    2. Processes article through each agent
-    3. Handles errors and validation
+    1. Initializes router and agents with session tracking
+    2. Processes article through summarization and verification
+    3. Handles deacronymization and educational enhancement
     4. Returns final enhanced summary
     """
 ```
@@ -134,6 +158,7 @@ The system implements custom exceptions for different error types:
 
 3. **Response Quality**
    - Agents must validate and ensure quality of their specific tasks
+   - Verification stage ensures summary accuracy and quality
    - Pipeline can be extended with additional validation agents
 
 4. **Extensibility**

@@ -9,6 +9,10 @@ class MinimalNewsSummary(BaseModel):
     voice_tag: Literal['male', 'female']
     news_original: str
 
+class NewsSummaryVerification(BaseModel):
+    adjustments_required: bool
+    composed_news: str
+
 class NewsContent(BaseModel):
     original_article: str
     summary: str
