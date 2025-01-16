@@ -6,7 +6,7 @@ A multi-agent system that processes Spanish news articles to create educational 
 
 The pipeline processes news articles through four stages:
 
-1. **Summarization & Verification**: 
+1. **Summarization & Verification**:
    - Creates a B1-level Spanish summary optimized for ~20-second radio broadcasts
    - Verifies summary quality and makes adjustments if needed
 2. **Deacronymization**: Expands acronyms and abbreviations for better comprehension
