@@ -15,7 +15,9 @@ By presenting news content in this condensed, multi-modal format, the bot helps 
 
 ## Additional Details
 
-- Currently, the bot is configured to parse news articles exclusively from the crc891.com website.
+- The bot is configured to parse news articles from multiple sources:
+  - crc891.com
+  - www.crhoy.com
 - Generated content is preserved in a local folder, allowing for future reuse and reducing API calls.
 - The bot implements a caching mechanism, storing the correspondence between URLs and generated content. This allows operators to resend previously unconfirmed content without incurring additional costs for summarization and text-to-speech conversion.
 
