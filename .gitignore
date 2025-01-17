@@ -11,3 +11,4 @@ data/responses/*
 ollama*.json
 ollama*.yml
 .aider*
+tmp/*
