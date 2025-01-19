@@ -72,7 +72,7 @@ class Deacronymizer(BaseChatModel):
             temperature=0.2,
             system_prompt=system_prompt,
             response_schema=deacronymized_item_schema,
-            max_tokens=1000
+            max_tokens=8192
         )
         super().__init__(model_config)
     

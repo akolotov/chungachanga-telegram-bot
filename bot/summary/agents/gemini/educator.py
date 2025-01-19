@@ -108,7 +108,7 @@ class Educator(BaseChatModel):
             temperature=0.2,
             system_prompt=formatted_system_prompt,
             response_schema=educating_item_schema,
-            max_tokens=1500
+            max_tokens=8192
         )
         super().__init__(model_config)
     
