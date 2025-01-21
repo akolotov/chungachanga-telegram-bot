@@ -15,9 +15,10 @@ from datetime import datetime, timezone
 from bot.web_parser import parse_article
 from bot.summary import summarize_article_by_gemini, summarize_article_by_openai, ResponseError
 from bot.text_to_speech import convert_text_to_speech
-from bot.content_db import ContentDB, VocabularyItem
+from bot.db import ContentDB, VocabularyItem
 from bot.helper import format_vocabulary, trim_message
-from bot.settings import settings, AgentEngine
+from bot.settings import settings
+from bot.llm import LLMEngine
 
 # Configure logging
 logging.basicConfig(
@@ -107,11 +108,11 @@ async def process_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # Step 2: Summarize the article
-        if settings.agent_engine == AgentEngine.GEMINI:
+        if settings.agent_engine == LLMEngine.GEMINI:
             logger.info(f"Handling the article with Gemini.")
             summary = summarize_article_by_gemini(content, session_id=timestamp)
         else:
-            # settings.agent_engine == AgentEngine.OPENAI
+            # settings.agent_engine == LLMEngine.OPENAI
             logger.info(f"Handling the article with OpenAI.")
             summary = summarize_article_by_openai(content, session_id=timestamp)
         

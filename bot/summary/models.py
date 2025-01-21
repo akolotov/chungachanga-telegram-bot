@@ -5,25 +5,8 @@ from typing import Literal, List
 class ResponseError(BaseModel):
     error: str
 
-class MinimalNewsSummary(BaseModel):
-    voice_tag: Literal['male', 'female']
-    news_original: str
-
-class NewsSummaryVerification(BaseModel):
-    adjustments_required: bool
-    composed_news: str
-
 class NewsContent(BaseModel):
     original_article: str
-    summary: str
-
-class AcronymItem(BaseModel):
-    acronym: str
-    full_form: str
-
-class DeacronymizedItem(BaseModel):
-    chain_of_thought: str
-    acronyms: List[AcronymItem]
     summary: str
 
 class EducatingVocabularyItem(BaseModel):
@@ -35,15 +18,12 @@ class EducatingVocabularyItem(BaseModel):
     synonyms_language: str
     synonyms: List[str]
 
-class EducatingItem(BaseModel):
-    chain_of_thought: str
-    translated_summary: str
-    vocabulary: List[EducatingVocabularyItem]
-
 class VocabularyItem(BaseModel):
     word: str
     translation: str
 
-class NewsSummary(MinimalNewsSummary):
+class NewsSummary(BaseModel):
+    voice_tag: Literal['male', 'female']
+    news_original: str
     news_translated: str
     vocabulary: List[VocabularyItem]

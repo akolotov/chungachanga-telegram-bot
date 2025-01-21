@@ -2,22 +2,25 @@ import google.generativeai as genai
 from google.ai.generativelanguage_v1beta.types import content
 import logging
 import json
-from typing import Union
+from typing import Union, List
 
 from ...models import NewsContent, EducatingVocabularyItem, NewsSummary, ResponseError
 from .prompts import system_prompt_educator as system_prompt
 from .prompts import news_article_example, news_without_acronyms_example
-from .base import BaseChatModel, ChatModelConfig
+from bot.llm import ChatModelConfig, GeminiChatModel, BaseStructuredOutput, LLMEngine, UnexpectedFinishReason, DeserializationError, initialize
 from .educator_helper import filter_vocabulary
-from .exceptions import GeminiEducatorError, GeminiUnexpectedFinishReason
+from .exceptions import GeminiEducatorError
 from bot.settings import settings
 
 logger = logging.getLogger(__name__)
 
-educating_item_schema = content.Schema(
-    type=content.Type.OBJECT,
-    properties={
-        "EducatingItem": content.Schema(
+class EducatingAddon(BaseStructuredOutput):
+    translated_summary: str
+    vocabulary: List[EducatingVocabularyItem]
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return content.Schema(
             type=content.Type.OBJECT,
             required=["chain_of_thought", "translated_summary", "vocabulary"],
             properties={
@@ -61,11 +64,24 @@ educating_item_schema = content.Schema(
                     type=content.Type.STRING,
                 ),
             },
-        ),
-    },
-)
+        )
 
-class Educator(BaseChatModel):
+    @classmethod
+    def deserialize(cls, json_str: str, _engine: LLMEngine) -> "EducatingAddon":
+        try:
+            educating_data = json.loads(json_str)
+
+            return EducatingAddon(
+                translated_summary=educating_data["translated_summary"],
+                vocabulary=[EducatingVocabularyItem(**item) for item in educating_data["vocabulary"]]
+            )
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Failed to parse Gemini response: {e}")
+            raise DeserializationError(
+                f"Failed to parse Gemini response: {e}")
+        
+class Educator(GeminiChatModel):
     """Gemini-powered agent that processes Spanish news content for language learners.
     
     This class extends BaseChatModel to provide educational content processing, including:
@@ -81,7 +97,7 @@ class Educator(BaseChatModel):
         target_language (str): The language to translate content into (e.g., "Russian")
     """
 
-    def __init__(self, model_name: str, session_id: str, target_language: str = "Russian"):
+    def __init__(self, model_name: str, session_id: str = "", target_language: str = "Russian"):
         """Initialize the Educator agent with specific configuration.
         
         Args:
@@ -107,8 +123,10 @@ class Educator(BaseChatModel):
             llm_model_name=model_name,
             temperature=0.2,
             system_prompt=formatted_system_prompt,
-            response_schema=educating_item_schema,
-            max_tokens=8192
+            response_class=EducatingAddon,
+            max_tokens=8192,
+            keep_raw_engine_responses=settings.keep_raw_engine_responses,
+            raw_engine_responses_dir=settings.raw_engine_responses_dir
         )
         super().__init__(model_config)
     
@@ -125,36 +143,27 @@ class Educator(BaseChatModel):
             news_content (NewsContent): Object containing original article and summary in Spanish
         
         Returns:
-            NewsSummary: Processed content including translations, vocabulary, and analysis
-            ResponseError: If there's an error in model generation
-        
-        Raises:
-            GeminiModelError: If there's an error in model generation
-            GeminiUnexpectedFinishReason: If the model stops generation unexpectedly
+            NewsSummary or ResponseError:
+                - NewsSummary: Object containing:
+                    - voice_tag: always "male"
+                    - news_original: empty string
+                    - news_translated: string with translated summary
+                    - vocabulary: list of VocabularyItem objects
+                - ResponseError: Error details if the verification fails
         """
 
         logger.info(f"Sending a request to Gemini to translate a news article.")
 
         try:
-            json_str = self._generate_response(news_content.model_dump_json())
-        except GeminiUnexpectedFinishReason as e:
+            model_response = self.generate_response(news_content.model_dump_json())
+        except UnexpectedFinishReason as e:
             return ResponseError(error=f"LLM engine responded with: {e}")
         except Exception as e:
             logger.error(f"Failed to generate response: {e}")
             raise GeminiEducatorError(f"Failed to generate response: {e}")
             
-        try:
-            data = json.loads(json_str)
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Failed to parse Gemini response: {e}")
-            raise GeminiEducatorError(f"Failed to parse Gemini response: {e}")
-
-        educating_item = data["EducatingItem"]
-
-        vocabulary = [EducatingVocabularyItem(**item) for item in educating_item["vocabulary"]]
-        
         try:    
-            filtered_vocabulary = filter_vocabulary(vocabulary)
+            filtered_vocabulary = filter_vocabulary(model_response.response.vocabulary)
         except Exception as e:
             logger.error(f"Failed to filter vocabulary: {e}")
             raise GeminiEducatorError(f"Failed to filter vocabulary: {e}")
@@ -162,7 +171,7 @@ class Educator(BaseChatModel):
         return NewsSummary(
             voice_tag="male",
             news_original="",
-            news_translated=educating_item["translated_summary"],
+            news_translated=model_response.response.translated_summary,
             vocabulary=filtered_vocabulary
         )
 
@@ -177,7 +186,7 @@ if __name__ == "__main__":
     if not api_key:
         raise GeminiEducatorError("Gemini API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")
 
-    genai.configure(api_key=api_key)
+    initialize()
 
     educator = Educator(settings.agent_engine_model)
     translated_summary = educator.translate(

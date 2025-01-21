@@ -1,14 +1,4 @@
-class GeminiModelError(Exception):
-    """Custom exception for Gemini Model errors."""
-    pass
-
-class GeminiUnexpectedFinishReason(Exception):
-    """Custom exception for unexpected finish reasons."""
-    pass
-
-class GeminiBaseError(Exception):
-    """Custom exception for Gemini errors."""
-    pass
+from bot.llm import GeminiBaseError
 
 class GeminiSummarizerError(GeminiBaseError):
     """Custom exception for Gemini Summarizer errors."""

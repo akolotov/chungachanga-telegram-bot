@@ -1,12 +1,11 @@
 from typing import Union
 import logging
-import google.generativeai as genai
 
+from bot.llm import initialize
 from .summarizer import Summarizer
 from .summary_verifier import SummaryVerifier
 from ...models import NewsContent, NewsSummary, ResponseError
 from .prompts import news_article_example
-from .exceptions import GeminiBaseError
 from bot.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -63,12 +62,7 @@ if __name__ == "__main__":
         handlers=[logging.StreamHandler()]
     )
 
-    api_key = settings.agent_engine_api_key
-    if not api_key:
-        raise GeminiBaseError(
-            "Gemini API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")
-
-    genai.configure(api_key=api_key)
+    initialize()
 
     router = SummaryRouter(settings.agent_engine_model)
     summary = router.process(news_article_example)

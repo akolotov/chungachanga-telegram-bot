@@ -1,4 +1,3 @@
-import google.generativeai as genai
 from google.ai.generativelanguage_v1beta.types import content
 import logging
 import json
@@ -7,16 +6,19 @@ from typing import Union
 from ...models import NewsContent, ResponseError
 from .prompts import system_prompt_deacronymizer as system_prompt
 from .prompts import news_article_example, news_summary_example
-from .base import BaseChatModel, ChatModelConfig
-from .exceptions import GeminiDeacronymizerError, GeminiUnexpectedFinishReason
+from bot.llm import ChatModelConfig, GeminiChatModel, BaseStructuredOutput, LLMEngine, UnexpectedFinishReason, DeserializationError, initialize
+from .exceptions import GeminiDeacronymizerError
 from bot.settings import settings
 
 logger = logging.getLogger(__name__)
 
-deacronymized_item_schema = content.Schema(
-    type=content.Type.OBJECT,
-    properties={
-        "DeacronymizedItem": content.Schema(
+
+class DeacronymizedSummary(BaseStructuredOutput):
+    summary: str
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return content.Schema(
             type=content.Type.OBJECT,
             required=["chain_of_thought", "acronyms", "summary"],
             properties={
@@ -38,11 +40,24 @@ deacronymized_item_schema = content.Schema(
                     type=content.Type.STRING,
                 ),
             },
-        ),
-    },
-)
+        )
 
-class Deacronymizer(BaseChatModel):
+    @classmethod
+    def deserialize(cls, json_str: str, _engine: LLMEngine) -> "DeacronymizedSummary":
+        try:
+            deacronymization_analysis = json.loads(json_str)
+
+            return DeacronymizedSummary(
+                summary=deacronymization_analysis["summary"]
+            )
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Failed to parse Gemini response: {e}")
+            raise DeserializationError(
+                f"Failed to parse Gemini response: {e}")
+
+
+class Deacronymizer(GeminiChatModel):
     """A class for converting acronyms in Spanish news summaries to their full forms.
 
     This class uses the Gemini model to identify and expand acronyms in news summaries,
@@ -63,7 +78,7 @@ class Deacronymizer(BaseChatModel):
             model_name (str): Name of the Gemini model to use
             session_id (str): Unique identifier to track agents' responses belong to the same session
         """
-        
+
         logger.info(f"Using Gemini model {model_name}.")
         model_config = ChatModelConfig(
             session_id=session_id,
@@ -71,53 +86,41 @@ class Deacronymizer(BaseChatModel):
             llm_model_name=model_name,
             temperature=0.2,
             system_prompt=system_prompt,
-            response_schema=deacronymized_item_schema,
-            max_tokens=8192
+            response_class=DeacronymizedSummary,
+            max_tokens=8192,
+            keep_raw_engine_responses=settings.keep_raw_engine_responses,
+            raw_engine_responses_dir=settings.raw_engine_responses_dir
         )
         super().__init__(model_config)
-    
+
     def sanitize(self, news_content: NewsContent) -> Union[str, ResponseError]:
         """Process a news summary to expand all acronyms to their full forms.
 
         Takes a NewsContent object containing the original article and its summary,
-        identifies any acronyms present, and returns a DeacronymizedItem with the
-        expanded version of the summary and details about the identified acronyms.
+        identifies any acronyms present, and returns a string with the expanded
+        version of the summary where acronyms replaced by full forms
 
         Args:
             news_content (NewsContent): Object containing the original article and its summary,
                 both in Spanish.
 
         Returns:
-            DeacronymizedItem: Object containing:
-                - chain_of_thought: Analysis of identified acronyms
-                - acronyms: List of identified acronyms and their full forms
-                - summary: Updated text with acronyms replaced by full forms
-
-        Raises:
-            GeminiModelError: If there is an error in generating the response
-            GeminiUnexpectedFinishReason: If the model stops generation for an unexpected reason
+            String with updated text with acronyms replaced by full forms or ResponseError:
         """
 
-        logger.info(f"Sending a request to Gemini to deacronymize a news article.")
+        logger.info(
+            f"Sending a request to Gemini to deacronymize a news article.")
 
         try:
-            json_str = self._generate_response(news_content.model_dump_json())
-        except GeminiUnexpectedFinishReason as e:
+            model_response = self.generate_response(news_content.model_dump_json())
+        except UnexpectedFinishReason as e:
             return ResponseError(error=f"LLM engine responded with: {e}")
         except Exception as e:
             logger.error(f"Failed to generate response: {e}")
             raise GeminiDeacronymizerError(f"Failed to generate response: {e}")
-            
-        try:
-            data = json.loads(json_str)
-            
-            deacronymized_item = data["DeacronymizedItem"]
 
-            return deacronymized_item["summary"]
-            
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Failed to parse Gemini response: {e}")
-            raise GeminiDeacronymizerError(f"Failed to parse Gemini response: {e}")
+        return model_response.response.summary
+
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -128,9 +131,10 @@ if __name__ == "__main__":
 
     api_key = settings.agent_engine_api_key
     if not api_key:
-        raise GeminiDeacronymizerError("Gemini API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")
+        raise GeminiDeacronymizerError(
+            "Gemini API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")
 
-    genai.configure(api_key=api_key)
+    initialize()
 
     deacronymizer = Deacronymizer(settings.agent_engine_model)
     sanitized_summary = deacronymizer.sanitize(

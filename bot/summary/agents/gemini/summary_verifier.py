@@ -1,37 +1,59 @@
-import google.generativeai as genai
 from google.ai.generativelanguage_v1beta.types import content
 import logging
 import json
 from typing import Union
 
-from ...models import NewsSummaryVerification, NewsContent, ResponseError
+from ...models import NewsContent, ResponseError
 from .prompts import system_prompt_summary_verification as system_prompt
 from .prompts import news_article_example, news_summary_example
-from .base import BaseChatModel, ChatModelConfig
-from .exceptions import GeminiSummarizerVerificationError, GeminiUnexpectedFinishReason
+from bot.llm import ChatModelConfig, GeminiChatModel, BaseStructuredOutput, LLMEngine, UnexpectedFinishReason, DeserializationError, initialize
+from .exceptions import GeminiSummarizerVerificationError
 from bot.settings import settings
 
 logger = logging.getLogger(__name__)
 
-summary_verification_schema = content.Schema(
-    type=content.Type.OBJECT,
-    enum=[],
-    required=["a_chain_of_thought",
-              "b_adjustments_required", "c_composed_news"],
-    properties={
-        "a_chain_of_thought": content.Schema(
-            type=content.Type.STRING,
-        ),
-        "b_adjustments_required": content.Schema(
-            type=content.Type.BOOLEAN,
-        ),
-        "c_composed_news": content.Schema(
-            type=content.Type.STRING,
-        ),
-    },
-)
 
-class SummaryVerifier(BaseChatModel):
+class NewsSummaryVerification(BaseStructuredOutput):
+    adjustments_required: bool
+    composed_news: str
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return content.Schema(
+            type=content.Type.OBJECT,
+            enum=[],
+            required=["a_chain_of_thought",
+                      "b_adjustments_required", "c_composed_news"],
+            properties={
+                "a_chain_of_thought": content.Schema(
+                    type=content.Type.STRING,
+                ),
+                "b_adjustments_required": content.Schema(
+                    type=content.Type.BOOLEAN,
+                ),
+                "c_composed_news": content.Schema(
+                    type=content.Type.STRING,
+                ),
+            },
+        )
+
+    @classmethod
+    def deserialize(cls, json_str: str, _engine: LLMEngine) -> "NewsSummaryVerification":
+        try:
+            verification_output = json.loads(json_str)
+
+            return NewsSummaryVerification(
+                adjustments_required=verification_output["b_adjustments_required"],
+                composed_news=verification_output["c_composed_news"]
+            )
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Failed to parse Gemini response: {e}")
+            raise DeserializationError(
+                f"Failed to parse Gemini response: {e}")
+
+
+class SummaryVerifier(GeminiChatModel):
     """A specialized chat model for verifying news summaries.
 
     This class extends BaseChatModel to verify news summaries.
@@ -56,8 +78,10 @@ class SummaryVerifier(BaseChatModel):
             llm_model_name=model_name,
             temperature=1.0,
             system_prompt=system_prompt,
-            response_schema=summary_verification_schema,
-            max_tokens=8192
+            response_class=NewsSummaryVerification,
+            max_tokens=8192,
+            keep_raw_engine_responses=settings.keep_raw_engine_responses,
+            raw_engine_responses_dir=settings.raw_engine_responses_dir
         )
         super().__init__(model_config)
 
@@ -73,39 +97,24 @@ class SummaryVerifier(BaseChatModel):
                 both in Spanish.
 
         Returns:
-            Union[NewsSummaryVerification, ResponseError]: Either:
+            NewsSummaryVerification or ResponseError:
                 - NewsSummaryVerification: Object containing:
                     - adjustments_required: Boolean indicating if changes are needed
                     - composed_news: Adjusted summary text or empty if no changes needed
                 - ResponseError: Error details if the verification fails
-
-        Raises:
-            GeminiSummarizerVerificationError: If there is an error in generating or parsing the response
-            GeminiUnexpectedFinishReason: If the model stops generation for an unexpected reason
         """
         logger.info(f"Sending a request to Gemini to verify a news summary.")
 
         try:
-            json_str = self._generate_response(news_content.model_dump_json())
-        except GeminiUnexpectedFinishReason as e:
+            model_response = self.generate_response(news_content.model_dump_json())
+        except UnexpectedFinishReason as e:
             return ResponseError(error=f"LLM engine responded with: {e}")
         except Exception as e:
             logger.error(f"Failed to generate response: {e}")
             raise GeminiSummarizerVerificationError(
                 f"Failed to generate response: {e}")
 
-        try:
-            summary_data = json.loads(json_str)
-
-            return NewsSummaryVerification(
-                adjustments_required=summary_data["b_adjustments_required"],
-                composed_news=summary_data["c_composed_news"]
-            )
-
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Failed to parse Gemini response: {e}")
-            raise GeminiSummarizerVerificationError(
-                f"Failed to parse Gemini response: {e}")
+        return model_response.response
 
 
 if __name__ == "__main__":
@@ -120,7 +129,7 @@ if __name__ == "__main__":
         raise GeminiSummarizerVerificationError(
             "Gemini API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")
 
-    genai.configure(api_key=api_key)
+    initialize()
 
     summary_verifier = SummaryVerifier(settings.agent_engine_model)
     summary = summary_verifier.verify(NewsContent(

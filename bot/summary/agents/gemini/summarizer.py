@@ -1,100 +1,120 @@
-import google.generativeai as genai
 from google.ai.generativelanguage_v1beta.types import content
 import logging
 import json
-from typing import Union
+from typing import Union, Literal
 
-from ...models import MinimalNewsSummary, ResponseError
+from ...models import ResponseError
 from .prompts import system_prompt_summarizer as system_prompt
 from .prompts import news_article_example
-from .base import BaseChatModel, ChatModelConfig
-from .exceptions import GeminiSummarizerError, GeminiUnexpectedFinishReason
+from bot.llm import ChatModelConfig, GeminiChatModel, BaseStructuredOutput, LLMEngine, UnexpectedFinishReason, DeserializationError, initialize
+from .exceptions import GeminiSummarizerError
 from bot.settings import settings
 
 logger = logging.getLogger(__name__)
 
-news_summary_schema = content.Schema(
-    type=content.Type.OBJECT,
-    enum=[],
-    required=["a_news_analysis", "b_voice_tag", "c_composed_news"],
-    properties={
-        "a_news_analysis": content.Schema(
+
+class MinimalNewsSummary(BaseStructuredOutput):
+    voice_tag: Literal['male', 'female']
+    news_original: str
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return content.Schema(
             type=content.Type.OBJECT,
             enum=[],
-            required=["a_mainActor", "b_otherActors", "c_mainAction", "d_additionalActions", "e_timeOrientation",
-                      "f_location", "g_target", "h_reason", "i_consequences", "j_contextBackground", "k_keyPoints", "l_sentiment"],
+            required=["a_news_analysis", "b_voice_tag", "c_composed_news"],
             properties={
-                "a_mainActor": content.Schema(
-                    type=content.Type.STRING,
-                ),
-                "b_otherActors": content.Schema(
-                    type=content.Type.ARRAY,
-                    items=content.Schema(
-                        type=content.Type.STRING,
-                    ),
-                ),
-                "c_mainAction": content.Schema(
-                    type=content.Type.STRING,
-                ),
-                "d_additionalActions": content.Schema(
-                    type=content.Type.ARRAY,
-                    items=content.Schema(
-                        type=content.Type.STRING,
-                    ),
-                ),
-                "e_timeOrientation": content.Schema(
-                    type=content.Type.STRING,
-                ),
-                "f_location": content.Schema(
-                    type=content.Type.STRING,
-                ),
-                "g_target": content.Schema(
-                    type=content.Type.STRING,
-                ),
-                "h_reason": content.Schema(
-                    type=content.Type.STRING,
-                ),
-                "i_consequences": content.Schema(
-                    type=content.Type.ARRAY,
-                    items=content.Schema(
-                        type=content.Type.OBJECT,
-                        enum=[],
-                        required=["a_type", "b_description"],
-                        properties={
-                            "a_type": content.Schema(
+                "a_news_analysis": content.Schema(
+                    type=content.Type.OBJECT,
+                    enum=[],
+                    required=["a_mainActor", "b_otherActors", "c_mainAction", "d_additionalActions", "e_timeOrientation",
+                            "f_location", "g_target", "h_reason", "i_consequences", "j_contextBackground", "k_keyPoints", "l_sentiment"],
+                    properties={
+                        "a_mainActor": content.Schema(
+                            type=content.Type.STRING,
+                        ),
+                        "b_otherActors": content.Schema(
+                            type=content.Type.ARRAY,
+                            items=content.Schema(
                                 type=content.Type.STRING,
                             ),
-                            "b_description": content.Schema(
+                        ),
+                        "c_mainAction": content.Schema(
+                            type=content.Type.STRING,
+                        ),
+                        "d_additionalActions": content.Schema(
+                            type=content.Type.ARRAY,
+                            items=content.Schema(
                                 type=content.Type.STRING,
                             ),
-                        },
-                    ),
+                        ),
+                        "e_timeOrientation": content.Schema(
+                            type=content.Type.STRING,
+                        ),
+                        "f_location": content.Schema(
+                            type=content.Type.STRING,
+                        ),
+                        "g_target": content.Schema(
+                            type=content.Type.STRING,
+                        ),
+                        "h_reason": content.Schema(
+                            type=content.Type.STRING,
+                        ),
+                        "i_consequences": content.Schema(
+                            type=content.Type.ARRAY,
+                            items=content.Schema(
+                                type=content.Type.OBJECT,
+                                enum=[],
+                                required=["a_type", "b_description"],
+                                properties={
+                                    "a_type": content.Schema(
+                                        type=content.Type.STRING,
+                                    ),
+                                    "b_description": content.Schema(
+                                        type=content.Type.STRING,
+                                    ),
+                                },
+                            ),
+                        ),
+                        "j_contextBackground": content.Schema(
+                            type=content.Type.STRING,
+                        ),
+                        "k_keyPoints": content.Schema(
+                            type=content.Type.ARRAY,
+                            items=content.Schema(
+                                type=content.Type.STRING,
+                            ),
+                        ),
+                        "l_sentiment": content.Schema(
+                            type=content.Type.STRING,
+                        ),
+                    },
                 ),
-                "j_contextBackground": content.Schema(
+                "b_voice_tag": content.Schema(
                     type=content.Type.STRING,
                 ),
-                "k_keyPoints": content.Schema(
-                    type=content.Type.ARRAY,
-                    items=content.Schema(
-                        type=content.Type.STRING,
-                    ),
-                ),
-                "l_sentiment": content.Schema(
+                "c_composed_news": content.Schema(
                     type=content.Type.STRING,
                 ),
             },
-        ),
-        "b_voice_tag": content.Schema(
-            type=content.Type.STRING,
-        ),
-        "c_composed_news": content.Schema(
-            type=content.Type.STRING,
-        ),
-    },
-)
+        )
 
+    @classmethod
+    def deserialize(cls, json_str: str, _engine: LLMEngine) -> "MinimalNewsSummary":
+        try:
+            summary_output = json.loads(json_str)
 
-class Summarizer(BaseChatModel):
+            return MinimalNewsSummary(
+                voice_tag=summary_output["b_voice_tag"],
+                news_original=summary_output["c_composed_news"]
+            )
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Failed to parse Gemini response: {e}")
+            raise DeserializationError(
+                f"Failed to parse Gemini response: {e}")
+
+class Summarizer(GeminiChatModel):
     """A specialized chat model for summarizing news articles in Spanish.
 
     This class extends BaseChatModel to create concise, easy-to-understand news announcements
@@ -129,8 +149,10 @@ class Summarizer(BaseChatModel):
             llm_model_name=model_name,
             temperature=1.0,
             system_prompt=system_prompt,
-            response_schema=news_summary_schema,
-            max_tokens=8192
+            response_class=MinimalNewsSummary,
+            max_tokens=8192,
+            keep_raw_engine_responses=settings.keep_raw_engine_responses,
+            raw_engine_responses_dir=settings.raw_engine_responses_dir
         )
         super().__init__(model_config)
 
@@ -144,38 +166,24 @@ class Summarizer(BaseChatModel):
             news_article (str): The original Spanish news article text to be summarized.
 
         Returns:
-            - MinimalNewsSummary: Object containing:
-                - voice_tag: Gender tag for the announcer (male/female)
-                - news_original: Simplified B1-level Spanish summary
-
-        Raises:
-            GeminiSummarizerError: If there is an error in generating or parsing the response
-            GeminiUnexpectedFinishReason: If the model stops generation for an unexpected reason
+            MinimalNewsSummary or ResponseError:
+                - MinimalNewsSummary: Object containing:
+                    - voice_tag: Gender tag for the announcer (male/female)
+                    - news_original: Simplified B1-level Spanish summary
+                - ResponseError: Error details if the summarization fails
         """
 
         logger.info(f"Sending a request to Gemini to create a news summary.")
 
         try:
-            json_str = self._generate_response(news_article)
-        except GeminiUnexpectedFinishReason as e:
+            model_response = self.generate_response(news_article)
+        except UnexpectedFinishReason as e:
             return ResponseError(error=f"LLM engine responded with: {e}")
         except Exception as e:
             logger.error(f"Failed to generate response: {e}")
             raise GeminiSummarizerError(f"Failed to generate response: {e}")
-
-        try:
-            summary_data = json.loads(json_str)
-
-            return MinimalNewsSummary(
-                voice_tag=summary_data["b_voice_tag"],
-                news_original=summary_data["c_composed_news"]
-            )
-
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Failed to parse Gemini response: {e}")
-            raise GeminiSummarizerError(
-                f"Failed to parse Gemini response: {e}")
-
+        
+        return model_response.response
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -189,7 +197,7 @@ if __name__ == "__main__":
         raise GeminiSummarizerError(
             "Gemini API key not found. Please set the AGENT_ENGINE_API_KEY environment variable.")
 
-    genai.configure(api_key=api_key)
+    initialize()
 
     summarizer = Summarizer(settings.agent_engine_model)
     summary = summarizer.generate(news_article_example)
