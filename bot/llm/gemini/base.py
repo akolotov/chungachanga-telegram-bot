@@ -1,16 +1,19 @@
-import os
-import google.generativeai as genai
-from google.generativeai import protos
-from typing import Optional, Any
-from textwrap import dedent
-import logging
+# Python standard library imports
 import dataclasses
+import logging
+from textwrap import dedent
+from typing import Any, Optional
 
+# Third-party imports
+import google.generativeai as genai
 import proto
+from google.generativeai import protos
 
-from ..types import ChatModelConfig, BaseStructuredOutput, LLMEngine, RawChatModelResponse
+# Local imports
+from bot.types import LLMEngine
 
 from ..common import BaseChatModel
+from ..types import BaseStructuredOutput, ChatModelConfig, RawChatModelResponse
 
 
 # From google.ai.generativelanguage_v1beta.types.Candidate

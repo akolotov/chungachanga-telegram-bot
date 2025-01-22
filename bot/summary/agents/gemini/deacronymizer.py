@@ -1,14 +1,27 @@
-from google.ai.generativelanguage_v1beta.types import content
-import logging
+# Python standard library imports
 import json
+import logging
 from typing import Union
 
-from ...models import NewsContent, ResponseError
-from .prompts import system_prompt_deacronymizer as system_prompt
-from .prompts import news_article_example, news_summary_example
-from bot.llm import ChatModelConfig, GeminiChatModel, BaseStructuredOutput, LLMEngine, UnexpectedFinishReason, DeserializationError, initialize
-from .exceptions import GeminiDeacronymizerError
+# Local imports
+from bot.llm import (
+    BaseStructuredOutput,
+    ChatModelConfig,
+    DeserializationError,
+    GeminiChatModel,
+    UnexpectedFinishReason,
+)
+from bot.llm.gemini import response_content as content
 from bot.settings import settings
+from bot.types import LLMEngine
+
+from .exceptions import GeminiDeacronymizerError
+from .prompts import (
+    news_article_example,
+    news_summary_example,
+    system_prompt_deacronymizer as system_prompt,
+)
+from ...models import NewsContent, ResponseError
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +141,8 @@ if __name__ == "__main__":
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[logging.StreamHandler()]
     )
+
+    from bot.llm import initialize
 
     api_key = settings.agent_engine_api_key
     if not api_key:

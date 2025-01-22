@@ -1,12 +1,12 @@
-from .initialize import initialize
+# Local imports
+from .exceptions import DeserializationError, GenerationError, UnexpectedFinishReason
 from .gemini import ChatModel as GeminiChatModel, GeminiBaseError
-from .types import LLMEngine, ChatModelConfig, BaseStructuredOutput
-from .exceptions import UnexpectedFinishReason, GenerationError, DeserializationError
+from .initialize import initialize
+from .types import BaseStructuredOutput, ChatModelConfig
 
 __all__ = [
     "initialize",
     "GeminiChatModel",
-    "LLMEngine",
     "ChatModelConfig",
     "BaseStructuredOutput",
     "UnexpectedFinishReason",

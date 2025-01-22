@@ -1,8 +1,9 @@
+# Local imports
 from bot.settings import settings
+from bot.types import LLMEngine
 
-from .gemini import initialize as initialize_gemini
 from .exceptions import ConfigurationError
-from .types import LLMEngine
+from .gemini import initialize as initialize_gemini
 
 def initialize():
     if settings.agent_engine == LLMEngine.GEMINI:

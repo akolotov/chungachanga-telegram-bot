@@ -1,12 +1,11 @@
-from typing import Optional, Any, Tuple
-from pydantic import BaseModel
-from enum import Enum
+# Python standard library imports
+from typing import Any, Optional, Tuple
 
-# Enum for the LLM engines
-class LLMEngine(Enum):
-    GEMINI = "gemini"
-    OPENAI = "openai"
-    OLLAMA = "ollama"
+# Third-party imports
+from pydantic import BaseModel
+
+# Local imports
+from bot.types import LLMEngine
 
 class ChatModelConfig(BaseModel):
     """

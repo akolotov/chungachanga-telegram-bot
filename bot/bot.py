@@ -1,24 +1,29 @@
-import os
-import logging
+# Python standard library imports
 import asyncio
+import logging
+import os
 from collections import defaultdict
-from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot, InputFile
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from telegram.helpers import escape_markdown
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+# Third-party imports
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
-from datetime import datetime, timezone
+from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
+                         ContextTypes, MessageHandler, filters)
+from telegram.helpers import escape_markdown
 
-# Import our custom modules
-from bot.web_parser import parse_article
-from bot.summary import summarize_article_by_gemini, summarize_article_by_openai, ResponseError
-from bot.text_to_speech import convert_text_to_speech
+# Local imports
 from bot.db import ContentDB, VocabularyItem
 from bot.helper import format_vocabulary, trim_message
 from bot.settings import settings
-from bot.llm import LLMEngine
+from bot.summary import (ResponseError, summarize_article_by_gemini,
+                        summarize_article_by_openai)
+from bot.text_to_speech import convert_text_to_speech
+from bot.types import LLMEngine
+from bot.web_parser import parse_article
 
 # Configure logging
 logging.basicConfig(

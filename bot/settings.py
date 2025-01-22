@@ -1,9 +1,14 @@
-from pydantic_settings import BaseSettings
-from pydantic import Field
-from typing import Any, List, Tuple, Type
+# Python standard library imports
 import os
 from enum import Enum
-from bot.llm.types import LLMEngine
+from typing import List
+
+# Third-party imports
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+# Local imports
+from bot.types import LLMEngine
 
 class ElevenLabsRotateMethod(str, Enum):
     BASIC = "basic"
@@ -22,11 +27,14 @@ class Settings(BaseSettings):
     raw_engine_responses_dir: str = Field(default=os.path.join("data", "responses"), env="RAW_ENGINE_RESPONSES_DIR")
     elevenlabs_api_key: str = Field(default="", env="ELEVENLABS_API_KEY")
     elevenlabs_rotate_method: ElevenLabsRotateMethod = Field(default=ElevenLabsRotateMethod.BASIC, env="ELEVENLABS_ROTATE_METHOD")
+    speech_to_text_api_key: str = Field(default="", env="SPEECH_TO_TEXT_API_KEY")
     audio_output_dir: str = Field(default=os.path.join("data", "audio"), env="AUDIO_OUTPUT_DIR")
     content_output_dir: str = Field(default=os.path.join("data", "content"), env="CONTENT_OUTPUT_DIR")
     transcript_output_dir: str = Field(default=os.path.join("data", "transcript"), env="TRANSCRIPT_OUTPUT_DIR")
     translation_output_dir: str = Field(default=os.path.join("data", "translation"), env="TRANSLATION_OUTPUT_DIR")
     content_db: str = Field(default=os.path.join("data", "content_db.json"), env="CONTENT_DB")
+    yt_crhoy_cache_dir: str = Field(default=os.path.join("data", "crhoy", "youtube"), env="YT_CRHOY_CACHE_DIR")
+    yt_crhoy_cache_db: str = Field(default=os.path.join("data", "crhoy", "youtube", "yt_crhoy_cache_db.json"), env="YT_CRHOY_CACHE_DB")
     url_link: str = Field(default="", env="URL_LINK")
 
     def get_telegram_operators(self) -> List[str]:

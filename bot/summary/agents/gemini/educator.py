@@ -1,16 +1,33 @@
-import google.generativeai as genai
-from google.ai.generativelanguage_v1beta.types import content
-import logging
+# Python standard library imports
 import json
-from typing import Union, List
+import logging
+from typing import List, Union
 
-from ...models import NewsContent, EducatingVocabularyItem, NewsSummary, ResponseError
-from .prompts import system_prompt_educator as system_prompt
-from .prompts import news_article_example, news_without_acronyms_example
-from bot.llm import ChatModelConfig, GeminiChatModel, BaseStructuredOutput, LLMEngine, UnexpectedFinishReason, DeserializationError, initialize
+# Local imports
+from bot.llm import (
+    BaseStructuredOutput,
+    ChatModelConfig,
+    DeserializationError,
+    GeminiChatModel,
+    UnexpectedFinishReason,
+)
+from bot.llm.gemini import response_content as content
+from bot.settings import settings
+from bot.types import LLMEngine
+
+from ...models import (
+    EducatingVocabularyItem,
+    NewsContent,
+    NewsSummary,
+    ResponseError,
+)
 from .educator_helper import filter_vocabulary
 from .exceptions import GeminiEducatorError
-from bot.settings import settings
+from .prompts import (
+    news_article_example,
+    news_without_acronyms_example,
+    system_prompt_educator as system_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +198,8 @@ if __name__ == "__main__":
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[logging.StreamHandler()]
     )
+
+    from bot.llm import initialize
 
     api_key = settings.agent_engine_api_key
     if not api_key:
