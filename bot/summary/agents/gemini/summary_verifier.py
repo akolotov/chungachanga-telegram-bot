@@ -83,8 +83,6 @@ class SummaryVerifier(GeminiChatModel):
             session_id (str): Unique identifier to track agents' responses belong to the same session
         """
 
-        logger.info(f"Using Gemini model {model_name}.")
-
         model_config = ChatModelConfig(
             session_id=session_id,
             agent_id="summary_verifier",

@@ -128,8 +128,6 @@ class Educator(GeminiChatModel):
         3. Initializes the base chat model with the specified configuration
         """
 
-        logger.info(f"Using Gemini model {model_name}.")
-
         formatted_system_prompt = system_prompt.format(
             language=target_language
         )
