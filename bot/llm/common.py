@@ -76,7 +76,7 @@ class BaseChatModel:
                         response=res.response
                     )
         else:
-            if res.failure_reason[0] == "Error generating response":
-                raise GenerationError(f"{res.failure_reason[0]}: {res.failure_reason[1]}")
+            if res.failure_reason[0] == "Unexpected finish reason":
+                raise UnexpectedFinishReason(res.failure_reason[1])
             else:
-                raise UnexpectedFinishReason(res.failure_reason[1])    
+                raise GenerationError(f"{res.failure_reason[0]}: {res.failure_reason[1]}")

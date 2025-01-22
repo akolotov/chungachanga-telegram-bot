@@ -14,6 +14,7 @@ from bot.types import LLMEngine
 
 from ..common import BaseChatModel
 from ..types import BaseStructuredOutput, ChatModelConfig, RawChatModelResponse
+from .initialize import is_initialized
 
 
 # From google.ai.generativelanguage_v1beta.types.Candidate
@@ -126,6 +127,12 @@ class ChatModel(BaseChatModel):
         Returns:
             GeminiChatModelResponse: The response from the Gemini model
         """
+        if not is_initialized():
+            logger.error("Gemini API not initialized. Call initialize() first.")
+            return GeminiChatModelResponse(
+                success=False,
+                failure_reason=("Initialization Error", "Gemini API not initialized. Call initialize() first.")
+            )
 
         logger = logging.getLogger(self.__class__.__module__)
 
