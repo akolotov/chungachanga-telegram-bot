@@ -9,7 +9,7 @@ COPY requirements.txt /app
 
 # Install dependencies, build packages, then cleanup
 RUN apt-get update && apt-get install -y \
-    build-essential \
+    build-essential ffmpeg \
     && pip install --no-cache-dir -r requirements.txt \
     && apt-get purge -y build-essential \
     && apt-get autoremove -y \

@@ -6,9 +6,11 @@ data/translation/*
 data/content_db.json
 data/state/*
 data/responses/*
+data/crhoy/*
 /*.py
 .env
 ollama*.json
 ollama*.yml
 .aider*
 tmp/*
+
