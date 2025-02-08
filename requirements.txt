@@ -11,3 +11,5 @@ cyrtranslit==1.1.1
 pyhtml2md==1.6.0
 pydub==0.25.1
 yt-dlp==2025.1.15
+sqlalchemy==2.0.38
+psycopg2-binary==2.9.10
