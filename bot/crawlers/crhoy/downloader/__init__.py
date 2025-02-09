@@ -1,0 +1,1 @@
+"""News downloader component of CRHoy crawler.""" 
