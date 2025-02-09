@@ -8,7 +8,7 @@ from requests.exceptions import RequestException
 import socket
 from urllib.parse import urljoin
 
-from .constants import CRHOY_API_BASE_URL, CRHOY_WEBSITE_URL
+from .constants import CRHOY_API_BASE_URL, CRHOY_WEBSITE_URL, CRHOY_REQUEST_HEADERS
 from .logger import get_component_logger
 
 logger = get_component_logger("api_client")
@@ -87,8 +87,9 @@ def check_website_availability(timeout: float = DEFAULT_TIMEOUT) -> bool:
         True if website is available, False otherwise
     """
     try:
-        response = requests.head(
+        response = requests.get(
             CRHOY_WEBSITE_URL,
+            headers=CRHOY_REQUEST_HEADERS,
             timeout=timeout,
             allow_redirects=True
         )

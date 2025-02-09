@@ -82,12 +82,6 @@ class CRHoyCrawlerSettings(BaseSettings):
         ge=0
     )
 
-    user_agent: str = Field(
-        default="CRHoy Crawler/1.0",
-        description="User agent string for HTTP requests",
-        validation_alias="CRHOY_CRAWLER_USER_AGENT"
-    )
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

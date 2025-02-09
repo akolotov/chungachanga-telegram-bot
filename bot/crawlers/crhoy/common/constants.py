@@ -9,7 +9,12 @@ COSTA_RICA_UTC_OFFSET = "-06"  # Used in timestamp strings
 
 # API endpoints
 CRHOY_API_BASE_URL = "https://api.crhoy.net/"
-CRHOY_WEBSITE_URL = "https://www.crhoy.com/"
+CRHOY_WEBSITE_URL = "https://www.crhoy.com/site/dist/terminos_y_condiciones.html"
+
+# HTTP headers for web requests
+CRHOY_REQUEST_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+}
 
 # Spanish month names mapping
 SPANISH_MONTH_MAP = {
