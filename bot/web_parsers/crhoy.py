@@ -3,7 +3,7 @@ from typing import Tuple
 import logging
 import pyhtml2md
 import re
-from .helper import get_page_content, WebParserError
+from .helper import get_page_content, WebParserError, WebDownloadError
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +20,15 @@ def parse_article(url: str, headers: dict) -> Tuple[str, str]:
 
     Raises:
         WebParserError: If there's an error parsing the article.
+        WebDownloadError: If there's an error downloading the page.
     """
     try:
         content = get_page_content(url, headers)
+    except WebDownloadError:
+        # Re-raise download errors
+        raise
 
+    try:
         logger.info("Parsing the page content.")
         
         soup = BeautifulSoup(content, 'html.parser')

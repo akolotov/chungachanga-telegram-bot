@@ -1,7 +1,7 @@
 from typing import Tuple, Optional, Dict, Callable
 import logging
 from bot.web_parsers import crc891, crhoy
-from bot.web_parsers.helper import WebParserError
+from bot.web_parsers.helper import WebParserError, WebDownloadError
 from bot.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,8 @@ def parse_article(url: str) -> Tuple[Optional[str], Optional[str]]:
         url (str): The URL of the article to parse.
 
     Returns:
-        Tuple[Optional[str], Optional[str]]: A tuple containing the article title and content,
-        or (None, None) if parsing fails.
+        Tuple[Optional[str], Optional[str]]: A tuple containing the article title and content.
+        Returns (None, None) if any error occurs during parsing or if the domain is not supported.
     """
     try:
         for domain, parser_func in parsers.items():
@@ -39,8 +39,13 @@ def parse_article(url: str) -> Tuple[Optional[str], Optional[str]]:
         
         logger.error(f"Unsupported domain in URL: {url}")
         return None, None
-    except WebParserError as e:
-        logger.error(f"Error parsing article: {e}")
+    except (WebParserError, WebDownloadError, Exception) as e:
+        if isinstance(e, WebDownloadError):
+            logger.error(f"Failed to download article: {e}")
+        elif isinstance(e, WebParserError):
+            logger.error(f"Failed to parse article content: {e}")
+        else:
+            logger.error(f"Unexpected error while processing article: {e}")
         return None, None
 
 if __name__ == "__main__":
