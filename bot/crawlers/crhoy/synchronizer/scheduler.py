@@ -1,6 +1,5 @@
 """Scheduling functionality for CRHoy metadata synchronizer."""
 
-import time
 from datetime import date, datetime, timedelta
 from typing import Optional, Tuple
 
@@ -14,8 +13,11 @@ from ..common.constants import COSTA_RICA_TIMEZONE
 from ..common.db import db_session
 from ..common.logger import get_component_logger
 from ..common.models import CRHoyMetadata
+from ..common.state import state
+from ..common.utils import sleep_until_next_check
 from ..settings import settings
-from .gap_handler import construct_gaps, insert_gaps
+from .gap_handler import get_earliest_gap, process_gap, construct_gaps, insert_gaps
+from .updater import update_metadata_for_date
 
 logger = get_component_logger("synchronizer.scheduler")
 
@@ -144,9 +146,74 @@ def check_metadata_exists(target_date: date) -> bool:
         ).first() is not None
 
 
-def sleep_until_next_check() -> None:
-    """Sleep until next check interval."""
-    logger.debug(
-        f"Sleeping for {settings.check_updates_interval} seconds"
-    )
-    time.sleep(settings.check_updates_interval)
+def process_current_date() -> None:
+    """Process metadata for current date."""
+    current_date = get_costa_rica_today()
+    logger.info(f"Processing metadata for current date {current_date}")
+    
+    # Update metadata for current date
+    if not update_metadata_for_date(current_date):
+        logger.error(f"Failed to update metadata for {current_date}")
+
+
+def process_earliest_gap() -> None:
+    """Process the earliest gap if exists."""
+    gap = get_earliest_gap()
+    if gap:
+        logger.info(f"Processing earliest gap: {gap}")
+        if process_gap(gap):
+            logger.info(f"Successfully processed gap {gap}")
+        else:
+            logger.error(f"Failed to process gap {gap}")
+
+
+def run_synchronizer() -> None:
+    """
+    Run the metadata synchronizer main loop.
+    
+    This function implements the main synchronizer flow:
+    1. Handle initial gaps based on FIRST_DAY setting
+    2. Enter main loop:
+       - Check connectivity
+       - If connected:
+         - Check if metadata exists for current date
+         - If not, handle day switch (gap identification)
+         - Process current date
+         - Process earliest gap if exists
+       - Sleep until next check or exit is requested
+    """
+    logger.info("Starting CRHoy metadata synchronizer")
+    
+    # Handle initial gaps based on FIRST_DAY setting
+    logger.info("Checking for initial gaps")
+    handle_initial_gaps()
+    
+    # Main loop
+    while not state.is_shutdown_requested():
+        try:
+            # Check connectivity
+            if not check_connectivity():
+                logger.warning("No connectivity, skipping this iteration")
+                sleep_until_next_check(settings.check_updates_interval)
+                continue
+            
+            # Get current date in Costa Rica timezone
+            current_date = get_costa_rica_today()
+            
+            # Check if we need to handle day switch
+            if not check_metadata_exists(current_date):
+                logger.info(f"No metadata for {current_date}, handling day switch")
+                handle_day_switch(current_date)
+            
+            # Process current date and earliest gap
+            process_current_date()
+            process_earliest_gap()
+            
+            # Sleep until next check or exit
+            sleep_until_next_check(settings.check_updates_interval)
+            
+        except Exception as e:
+            logger.error(f"Unexpected error in synchronizer: {e}")
+            sleep_until_next_check(settings.check_updates_interval)
+    
+    logger.info("Metadata synchronizer shutdown complete")

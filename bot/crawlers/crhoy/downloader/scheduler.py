@@ -1,10 +1,9 @@
 """Scheduling functionality for CRHoy news downloader."""
 
-import time
-
 from ..common.api_client import check_internet_connection, check_website_availability
 from ..common.logger import get_component_logger
 from ..common.state import state
+from ..common.utils import sleep_until_next_check
 from ..settings import settings
 from .processor import process_news_chunk, NewsProcessorError
 
@@ -32,19 +31,6 @@ def check_connectivity(timeout: float = 5.0) -> bool:
     return True
 
 
-def sleep_until_next_check() -> None:
-    """
-    Sleep until next check interval or until exit is requested.
-    Breaks early if shutdown is requested.
-    """
-    # Sleep in small intervals to check exit flag more frequently
-    remaining = settings.download_interval
-    while remaining > 0 and not state.is_shutdown_requested():
-        sleep_time = min(1, remaining)  # Sleep max 1 second at a time
-        time.sleep(sleep_time)
-        remaining -= sleep_time
-
-
 def run_downloader() -> None:
     """
     Run the news downloader main loop.
@@ -62,21 +48,21 @@ def run_downloader() -> None:
             # Check connectivity
             if not check_connectivity():
                 logger.warning("No connectivity, skipping this iteration")
-                sleep_until_next_check()
+                sleep_until_next_check(settings.download_interval)
                 continue
             
             # Process news chunk
             process_news_chunk()
             
             # Sleep until next check or exit
-            sleep_until_next_check()
+            sleep_until_next_check(settings.download_interval)
             
         except NewsProcessorError as e:
             logger.error(f"Error processing news: {e}")
-            sleep_until_next_check()
+            sleep_until_next_check(settings.download_interval)
             
         except Exception as e:
             logger.error(f"Unexpected error in downloader: {e}")
-            sleep_until_next_check()
+            sleep_until_next_check(settings.download_interval)
     
     logger.info("News downloader shutdown complete") 
