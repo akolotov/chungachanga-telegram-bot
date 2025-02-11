@@ -52,6 +52,21 @@ Every wrapper provides an `initialize` method that is invoked based on the LLM e
 
 The main use case for the initialization is to set up the API key.
 
+#### Rate Limiting
+
+The chat models implement rate limiting to respect API quotas. Each model type (identified by `llm_model_name`) has its own rate limiter that:
+
+- Tracks the number of requests made within a time window
+- Automatically delays requests when the rate limit would be exceeded
+- Maintains separate limits for different model types (e.g., different Gemini models)
+
+Rate limits can be configured through `ChatModelConfig`:
+
+- `rate_limit_rpm`: Maximum number of requests allowed per minute
+- `rate_limit_period_seconds`: Time window in seconds for the rate limit
+
+When the rate limit is reached, the request is automatically delayed until the next time window, rather than failing.
+
 #### Chat Initialization
 
 The chat of a specific engine is operated by the chat model class.

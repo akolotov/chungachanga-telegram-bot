@@ -24,6 +24,8 @@ class ChatModelConfig(BaseModel):
         max_tokens (Optional[int]): Maximum number of tokens in the response.
         keep_raw_engine_responses (bool): Whether to keep raw LLM responses.
         raw_engine_responses_dir (str): Directory to save raw LLM responses.
+        rate_limit_rpm (int): Maximum number of requests allowed per time window for this model
+        rate_limit_period_seconds (int): Time window in seconds for the rate limit
     """
     session_id: str = ""
     agent_id: str = ""
@@ -34,6 +36,8 @@ class ChatModelConfig(BaseModel):
     max_tokens: Optional[int] = 8192
     keep_raw_engine_responses: bool = False
     raw_engine_responses_dir: str = ""
+    rate_limit_rpm: int = 10  # Default: 10 requests per minute
+    rate_limit_period_seconds: int = 60  # Default: 60 seconds window
 
     class Config:
         arbitrary_types_allowed = True

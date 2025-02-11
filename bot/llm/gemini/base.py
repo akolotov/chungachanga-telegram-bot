@@ -11,6 +11,7 @@ from google.generativeai import protos
 
 # Local imports
 from bot.types import LLMEngine
+from bot.llm.ratelimiter import RateLimiter
 
 from ..common import BaseChatModel
 from ..types import BaseStructuredOutput, ChatModelConfig, RawChatModelResponse
@@ -111,6 +112,13 @@ class ChatModel(BaseChatModel):
 
         self._history: list[protos.Content] = []
 
+        # Initialize rate limiter with config values
+        self._rate_limiter = RateLimiter.get_instance(
+            model_name=config.llm_model_name,
+            max_requests=config.rate_limit_rpm,
+            period=config.rate_limit_period_seconds
+        )
+
         super().__init__(config)
 
     def _generate_response(self, prompt: str, response_class: Optional[Any] = None) -> GeminiChatModelResponse:
@@ -135,6 +143,9 @@ class ChatModel(BaseChatModel):
             )
 
         logger = logging.getLogger(self.__class__.__module__)
+
+        # Before adding to history, check rate limit
+        self._rate_limiter.acquire(logger=logger)
 
         # Add prompt to history
         prompt_content = protos.Content(
