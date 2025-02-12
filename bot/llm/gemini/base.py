@@ -105,10 +105,10 @@ class ChatModel(BaseChatModel):
 
         self._generation_config = generation_config
 
-        self.model = genai.GenerativeModel(
-            model_name=config.llm_model_name,
-            system_instruction=config.system_prompt
-        )
+        model_args = {"model_name": config.llm_model_name}
+        if config.system_prompt:
+            model_args["system_instruction"] = config.system_prompt
+        self.model = genai.GenerativeModel(**model_args)
 
         self._history: list[protos.Content] = []
 
