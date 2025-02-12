@@ -115,8 +115,8 @@ class ChatModel(BaseChatModel):
         # Initialize rate limiter with config values
         self._rate_limiter = RateLimiter.get_instance(
             model_name=config.llm_model_name,
-            max_requests=config.rate_limit_rpm,
-            period=config.rate_limit_period_seconds
+            max_requests=config.request_limit,
+            period=config.request_limit_period_seconds
         )
 
         super().__init__(config)

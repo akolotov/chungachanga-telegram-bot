@@ -44,14 +44,15 @@ The agentic approach offers several advantages over a single large-prompt soluti
 
 ### 1. Base Architecture
 
-The system is built on a common base class that handles Gemini API interactions:
+The system is built on a common base class `bot.llm.GeminiChatModel` that handles Gemini API interactions:
 
 ```python
-class BaseChatModel:
+class GeminiChatModel:
     """Base class for Gemini model interactions with:
     - Configurable model settings
     - Response schema validation
     - Chat history tracking
+    - Requests rate limit management
     - Error handling
     """
 ```

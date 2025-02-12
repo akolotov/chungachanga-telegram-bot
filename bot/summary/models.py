@@ -2,8 +2,10 @@
 from pydantic import BaseModel
 from typing import Literal, List
 
-class ResponseError(BaseModel):
-    error: str
+from bot.llm import BaseResponseError
+
+class ResponseError(BaseResponseError):
+    pass
 
 class NewsContent(BaseModel):
     original_article: str
