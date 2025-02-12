@@ -232,7 +232,14 @@ def process_news_chunk() -> None:
                         else:
                             # Failed to parse - mark as failed
                             news.failed = True
-                    
+
+                            # To receive the news that failed to parse:
+                            # SELECT n.id, n.url, n.timestamp, c.category
+                            # FROM crhoy_news n
+                            # JOIN crhoy_news_categories c ON n.id = c.news_id
+                            # WHERE n.failed = true
+                            # ORDER BY n.timestamp DESC;
+
                     # Commit changes for this news
                     session.commit()
                     
