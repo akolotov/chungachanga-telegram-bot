@@ -122,7 +122,7 @@ if __name__ == "__main__":
     from datetime import datetime
     from bot.llm import initialize
     from .prompts.tests import test_article
-    from .prompts.category import test_existing_categories
+    from .prompts.category import initial_existing_categories_to_map
 
     # Configure logging
     logging.basicConfig(
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Test categorization
-    categorizer = Categorizer(test_existing_categories, session_id)
+    categorizer = Categorizer(initial_existing_categories_to_map(), session_id)
     result = categorizer.process(test_article)
 
     if isinstance(result, BaseResponseError):

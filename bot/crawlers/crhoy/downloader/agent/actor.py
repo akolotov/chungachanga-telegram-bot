@@ -118,7 +118,7 @@ def summarize_article(article: str, target_language: str, session_id: str = "") 
 
 if __name__ == "__main__":
     from bot.llm import initialize
-    from .prompts.category import test_existing_categories
+    from .prompts.category import initial_existing_categories_to_map
     from .prompts.tests import test_article
 
     logging.basicConfig(
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     initialize()
 
     # Test categorization
-    category_result = categorize_article(test_article, test_existing_categories)
+    category_result = categorize_article(test_article, initial_existing_categories_to_map())
     if isinstance(category_result, BaseResponseError):
         print(f"Error: {category_result.error}")
     else:
