@@ -11,6 +11,8 @@ from .actor import (
     summarize_article
 )
 
+from .prompts.category import UNKNOWN_CATEGORY
+
 __all__ = [
     # Types
     "ArticleRelation",
@@ -19,5 +21,8 @@ __all__ = [
     
     # Functions
     "categorize_article",
-    "summarize_article"
+    "summarize_article",
+    
+    # Constants
+    "UNKNOWN_CATEGORY"
 ] 

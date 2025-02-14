@@ -14,6 +14,7 @@ from ..common.constants import CRHOY_REQUEST_HEADERS
 from ..settings import settings
 from bot.web_parsers.crhoy import parse_article
 from bot.web_parsers.helper import WebDownloadError, WebParserError
+from .news_analyzer import analyze_news, NewsAnalyzerError
 
 logger = get_component_logger("downloader.processor")
 
@@ -190,6 +191,8 @@ def process_news_chunk() -> None:
        - If no, try to download and parse
        - If parsing fails, mark as failed
        - If parsing succeeds, update filename
+       - Commit changes for this news
+       - If news was processed successfully, analyze it
        Each news is processed in its own transaction
     """
     try:
@@ -239,9 +242,17 @@ def process_news_chunk() -> None:
                             # JOIN crhoy_news_categories c ON n.id = c.news_id
                             # WHERE n.failed = true
                             # ORDER BY n.timestamp DESC;
-
+                    
                     # Commit changes for this news
                     session.commit()
+                    
+                    # If news was processed successfully, analyze it
+                    if news.filename:
+                        try:
+                            analyze_news(news, session)
+                        except NewsAnalyzerError as e:
+                            logger.error(f"Failed to analyze news {news.id}: {e}")
+                            # Continue with next news even if analysis fails
                     
                 except Exception as e:
                     logger.error(f"Failed to process news {news.id}: {e}")

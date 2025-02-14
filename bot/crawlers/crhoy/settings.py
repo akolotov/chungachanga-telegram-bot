@@ -1,8 +1,9 @@
 """Settings management for CRHoy crawler components."""
 
-from datetime import date
+from datetime import date, time
 from pathlib import Path
-from typing import Optional, Set
+import json
+from typing import Optional, Set, List
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +18,17 @@ class CRHoyCrawlerSettings(BaseSettings):
         default=Path("data/crhoy"),
         description="Base directory for storing crawler data",
         validation_alias="CRHOY_CRAWLER_DATA_DIR"
+    )
+
+    # Notifier settings
+    notifier_trigger_times: List[time] = Field(
+        default=[
+            time(6, 0),   # 6:00
+            time(12, 0),  # 12:00
+            time(16, 30)  # 16:30
+        ],
+        description="List of times during the day when the notifier will be triggered",
+        validation_alias="CRHOY_NOTIFIER_TRIGGER_TIMES"
     )
 
     # Database connection
@@ -177,6 +189,36 @@ class CRHoyCrawlerSettings(BaseSettings):
     def parse_data_dir(cls, v: str | Path) -> Path:
         """Convert string path to Path object."""
         return Path(v) if isinstance(v, str) else v
+
+    @field_validator("notifier_trigger_times", mode="before")
+    def parse_trigger_times(cls, v: str | List[time]) -> List[time]:
+        """Parse JSON string of trigger times into a list of time objects.
+        
+        The times are assumed to be in Costa Rica timezone (America/Costa_Rica).
+        Input format examples:
+        - JSON array of HH:MM strings: '["06:00", "12:00", "16:30"]'
+        - List of time objects (when set programmatically)
+        """
+        if isinstance(v, str):
+            try:
+                # Parse JSON string into list of time strings
+                time_strings = json.loads(v)
+                if not isinstance(time_strings, list):
+                    raise ValueError("Trigger times must be a JSON array")
+                
+                # Convert each time string to time object
+                # Note: time objects are naive (no timezone), but we document
+                # that they are assumed to be in Costa Rica timezone
+                return [
+                    time.fromisoformat(t) if isinstance(t, str) else t
+                    for t in time_strings
+                ]
+            except (json.JSONDecodeError, ValueError) as e:
+                raise ValueError(
+                    f"Invalid trigger times format. Must be a JSON array of "
+                    f"time strings in HH:MM format (Costa Rica timezone): {str(e)}"
+                )
+        return v
 
 
 # Create a global settings instance

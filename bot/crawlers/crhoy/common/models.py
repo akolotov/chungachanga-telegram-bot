@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, TIMESTAMP, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Boolean, Date, TIMESTAMP, ForeignKey, Index, CheckConstraint
 from sqlalchemy.dialects.postgresql import DATERANGE
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -87,4 +87,69 @@ class MissedCRHoyMetadata(Base):
 
     __table_args__ = (
         Index('ix_missed_crhoy_metadata_gap', gap, postgresql_using='gist'),
+    )
+
+class CRHoySmartCategories(Base):
+    """Stores categories and their descriptions for news analyzer.
+    
+    Fields:
+        category (str): Primary key, category name that could contain subcategory 
+                       (e.g., 'economia' or 'deportes/futbol')
+        description (str): Description of the category in English
+        ignore (bool): If True, the news analyzer should not perform deep analysis 
+                      of news in this category
+    """
+    __tablename__ = 'crhoy_smart_categories'
+
+    category = Column(String, primary_key=True)
+    description = Column(String, nullable=False)
+    ignore = Column(Boolean, default=False, nullable=False)
+
+class CRHoySummary(Base):
+    """Stores summaries available for news articles.
+    
+    Fields:
+        id (int): Foreign key to CRHoyNews.id, part of composite primary key
+        filename (str): Path to the file with the summary of news
+        lang (str): Language code of the summary (e.g., 'en', 'es', 'ru')
+    """
+    __tablename__ = 'crhoy_summary'
+
+    id = Column(Integer, ForeignKey('crhoy_news.id'), primary_key=True)
+    filename = Column(String, nullable=False)
+    lang = Column(String(2), primary_key=True)  # 2-char language code
+
+    news = relationship("CRHoyNews", backref="summaries")
+
+class CRHoyNotifierNews(Base):
+    """Stores analysis results for news articles.
+    
+    Fields:
+        id (int): Foreign key to CRHoyNews.id, primary key
+        timestamp (datetime): Same as the timestamp in CRHoyNews
+        related (str): Whether the news is related to Costa Rica 
+                      ('directly', 'indirectly', 'na')
+        category (str): Foreign key to CRHoySmartCategories.category
+        skipped (bool): True if news was filtered out due to category or 
+                       not being related to Costa Rica
+        failed (bool): True if news analysis failed
+    """
+    __tablename__ = 'crhoy_notifier_news'
+
+    id = Column(Integer, ForeignKey('crhoy_news.id'), primary_key=True)
+    timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+    related = Column(String, nullable=False)
+    category = Column(
+        String, 
+        ForeignKey('crhoy_smart_categories.category'),
+        nullable=False
+    )
+    skipped = Column(Boolean, default=False, nullable=False)
+    failed = Column(Boolean, default=False, nullable=False)
+
+    news = relationship("CRHoyNews", backref="notifier_analysis")
+    smart_category = relationship("CRHoySmartCategories")
+
+    __table_args__ = (
+        CheckConstraint("related IN ('directly', 'indirectly', 'na')", name="ck_related_values"),
     )

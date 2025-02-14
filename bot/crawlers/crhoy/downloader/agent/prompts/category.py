@@ -1,5 +1,7 @@
 from bot.llm.gemini import response_content as content
 
+UNKNOWN_CATEGORY = "__unknown__"
+
 categorizer_prompt = """
 You are the head of content editors for a Telegram channel with recognition of the Society of Editors' prestigious Media Freedom Awards. The channel publishes announcements for news related to Costa Rica. Before you pass the news article for further handling to one of your editors, you need to identify:
 - whether the news is related to Costa Rica 
@@ -69,6 +71,10 @@ categorizer_structured_output = content.Schema(
   )
 
 initial_smart_categories = {
+    UNKNOWN_CATEGORY: {
+        "description": "Internal category used only for database tracking of news articles that have not yet been assigned a proper category",
+        "ignore": True
+    },
     "lifestyle": {
         "description": "news related to people's way of life, their choices, values and stories of their life",
         "ignore": False
@@ -145,6 +151,10 @@ initial_smart_categories = {
         "description": "News related to accidents and incidents that cause damage to essential infrastructure, such as power grids, communication networks, roads, and water supply systems, and their resulting impact on services and communities",
         "ignore": False
     },
+    "incidents/roads": {
+        "description": "News related to accidents, collisions, and other road incidents involving injuries, fatalities, or traffic disruptions, highlighting events on highways, streets, and other public thoroughfares.",
+        "ignore": False
+    },
     "education": {
         "description": "News related to educational policies, initiatives, student achievements, and other developments in the education sector",
         "ignore": False
@@ -166,6 +176,7 @@ initial_smart_categories = {
 def initial_existing_categories_to_map():
     """
     Transform a dictionary with nested description/ignore structure to a simple category -> description mapping.
+    Excludes the UNKNOWN_CATEGORY from the mapping.
     
     Returns:
         dict: Simple mapping of category names to their descriptions
@@ -173,4 +184,5 @@ def initial_existing_categories_to_map():
     return {
         category: info["description"]
         for category, info in initial_smart_categories.items()
+        if category != UNKNOWN_CATEGORY
     }
