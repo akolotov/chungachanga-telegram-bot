@@ -28,7 +28,34 @@ class CRHoyCrawlerSettings(BaseSettings):
             time(16, 30)  # 16:30
         ],
         description="List of times during the day when the notifier will be triggered",
-        validation_alias="CRHOY_NOTIFIER_TRIGGER_TIMES"
+        validation_alias="NEWS_NOTIFIER_TRIGGER_TIMES"
+    )
+
+    # Telegram notifier bot settings
+    notifier_telegram_bot_token: str = Field(
+        default="",
+        description="Telegram Bot Token for the news notifier",
+        validation_alias="NEWS_NOTIFIER_TELEGRAM_BOT_TOKEN"
+    )
+
+    notifier_telegram_channel_id: str = Field(
+        default="",
+        description="Telegram channel ID where the bot will post news summaries",
+        validation_alias="NEWS_NOTIFIER_TELEGRAM_CHANNEL_ID"
+    )
+
+    notifier_telegram_max_retries: int = Field(
+        default=3,
+        description="Maximum number of retries for sending messages to Telegram",
+        validation_alias="NEWS_NOTIFIER_TELEGRAM_MAX_RETRIES",
+        gt=0
+    )
+
+    notifier_telegram_messages_delay: float = Field(
+        default=1.0,
+        description="Delay in seconds between sending messages to Telegram to avoid rate limits",
+        validation_alias="NEWS_NOTIFIER_TELEGRAM_MESSAGES_DELAY",
+        gt=0
     )
 
     # Database connection

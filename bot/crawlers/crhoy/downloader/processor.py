@@ -30,11 +30,11 @@ def _get_news_to_process(
 ) -> List[CRHoyNews]:
     """
     Get a chunk of unprocessed news that should be downloaded.
-    
+
     Args:
         session: Database session
         chunk_size: Maximum number of news to return
-        
+
     Returns:
         List of news entries to process, ordered by timestamp descending (most recent first)
     """
@@ -44,10 +44,12 @@ def _get_news_to_process(
         .where(CRHoyNews.filename == "")
         .where(CRHoyNews.skipped == False)  # noqa: E712
         .where(CRHoyNews.failed == False)   # noqa: E712
-        .order_by(CRHoyNews.timestamp.desc())  # Most recent first
+        # The logic to pickup news must be inline with the notifier: earliest news first
+        # Otherwise, notifications for older news will be sent after more recent news.
+        .order_by(CRHoyNews.timestamp)
         .limit(chunk_size)
     )
-    
+
     return list(session.execute(query).scalars().all())
 
 
@@ -57,11 +59,11 @@ def _get_news_categories(
 ) -> Dict[int, str]:
     """
     Get categories for all news IDs in a single query.
-    
+
     Args:
         session: Database session
         news_ids: List of news IDs to get categories for
-        
+
     Returns:
         Dictionary mapping news ID to category path
     """
@@ -69,7 +71,7 @@ def _get_news_categories(
         select(CRHoyNewsCategories.news_id, CRHoyNewsCategories.category)
         .where(CRHoyNewsCategories.news_id.in_(news_ids))
     )
-    
+
     return {
         row.news_id: row.category
         for row in session.execute(query).all()
@@ -79,10 +81,10 @@ def _get_news_categories(
 def _prepare_news_path(news: CRHoyNews) -> Path:
     """
     Prepare path for saving news content.
-    
+
     Args:
         news: News entry to prepare path for
-        
+
     Returns:
         Path where news content should be saved
     """
@@ -90,11 +92,11 @@ def _prepare_news_path(news: CRHoyNews) -> Path:
     dt = news.timestamp.astimezone()  # Use news timezone
     date_str = dt.strftime("%Y-%m-%d")
     time_str = dt.strftime("%H-%M")
-    
+
     # Construct path
     return (
-        settings.data_dir / "news" / 
-        date_str / 
+        settings.data_dir / "news" /
+        date_str /
         f"{time_str}-{news.id}.md"
     )
 
@@ -106,26 +108,26 @@ def _save_news_content(
 ) -> None:
     """
     Save news content to file.
-    
+
     Args:
         path: Path where to save the content
         title: News title
         content: News content
-        
+
     Raises:
         NewsProcessorError: If saving fails
     """
     try:
         # Ensure directory exists
         path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Save content
         with path.open('w', encoding='utf-8') as f:
             f.write(f"--- title: {title}\n\n")
             f.write(content)
-            
+
         logger.info(f"Saved news content to {path}")
-        
+
     except Exception as e:
         raise NewsProcessorError(f"Failed to save news content to {path}: {e}")
 
@@ -133,18 +135,18 @@ def _save_news_content(
 def process_news(news: CRHoyNews) -> Optional[str]:
     """
     Process a single news entry.
-    
+
     This function:
     1. Downloads and parses the news page
     2. Saves the content to a file
     3. Returns the path where content was saved
-    
+
     Args:
         news: News entry to process
-        
+
     Returns:
         Path where content was saved if successful, None if failed
-        
+
     Raises:
         NewsProcessorError: If processing fails unexpectedly
     """
@@ -154,25 +156,26 @@ def process_news(news: CRHoyNews) -> Optional[str]:
             news.url,
             CRHOY_REQUEST_HEADERS
         )
-        
+
         if not title or not content:
-            logger.error(f"Failed to parse news {news.id}: empty title or content")
+            logger.error(
+                f"Failed to parse news {news.id}: empty title or content")
             return None
-            
+
         # Prepare path and save content
         path = _prepare_news_path(news)
         _save_news_content(path, title, content)
-        
+
         return str(path)
-        
+
     except WebDownloadError as e:
         logger.error(f"Failed to download news {news.id}: {e}")
         return None
-        
+
     except WebParserError as e:
         logger.error(f"Failed to parse news {news.id}: {e}")
         return None
-        
+
     except Exception as e:
         logger.error(f"Unexpected error processing news {news.id}: {e}")
         raise NewsProcessorError(f"Failed to process news: {e}")
@@ -181,7 +184,7 @@ def process_news(news: CRHoyNews) -> Optional[str]:
 def process_news_chunk() -> None:
     """
     Process a chunk of news.
-    
+
     This function implements the main news processing flow:
     1. Get chunk of unprocessed news
     2. Get categories for all news in chunk in a single query
@@ -202,19 +205,19 @@ def process_news_chunk() -> None:
                 session,
                 settings.downloads_chunk_size
             )
-            
+
             if not news_chunk:
                 logger.info("No news to process")
                 return
-                
+
             # Get categories for all news in a single query
             news_categories = _get_news_categories(
                 session,
                 [news.id for news in news_chunk]
             )
-            
+
             logger.info(f"Processing {len(news_chunk)} news entries")
-            
+
             # Process each news in its own transaction
             for news in news_chunk:
                 try:
@@ -242,24 +245,25 @@ def process_news_chunk() -> None:
                             # JOIN crhoy_news_categories c ON n.id = c.news_id
                             # WHERE n.failed = true
                             # ORDER BY n.timestamp DESC;
-                    
+
                     # Commit changes for this news
                     session.commit()
-                    
+
                     # If news was processed successfully, analyze it
                     if news.filename:
                         try:
                             analyze_news(news, session)
                         except NewsAnalyzerError as e:
-                            logger.error(f"Failed to analyze news {news.id}: {e}")
+                            logger.error(
+                                f"Failed to analyze news {news.id}: {e}")
                             # Continue with next news even if analysis fails
-                    
+
                 except Exception as e:
                     logger.error(f"Failed to process news {news.id}: {e}")
                     # Mark as failed and continue with next
                     news.failed = True
                     session.commit()
-                    
+
     except Exception as e:
         logger.error(f"Error in news processing: {e}")
-        raise NewsProcessorError(f"News processing failed: {e}") 
+        raise NewsProcessorError(f"News processing failed: {e}")

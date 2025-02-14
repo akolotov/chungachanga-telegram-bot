@@ -153,3 +153,21 @@ class CRHoyNotifierNews(Base):
     __table_args__ = (
         CheckConstraint("related IN ('directly', 'indirectly', 'na')", name="ck_related_values"),
     )
+
+class CRHoySentNews(Base):
+    """Tracks which news articles have been sent to the Telegram channel.
+    
+    This table is used by the notifier bot to avoid sending duplicate news.
+    Only recent sent news are kept - older records are cleaned up by the notifier bot
+    based on the previous trigger time window.
+    
+    Fields:
+        id (int): Foreign key to CRHoyNotifierNews.id, primary key
+        timestamp (datetime): Original timestamp of the news article in Costa Rica timezone
+    """
+    __tablename__ = 'crhoy_sent_news'
+
+    id = Column(Integer, ForeignKey('crhoy_notifier_news.id'), primary_key=True)
+    timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+
+    notifier_news = relationship("CRHoyNotifierNews", backref="sent_status")
