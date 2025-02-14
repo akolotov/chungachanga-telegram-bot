@@ -1,5 +1,4 @@
 import json
-import logging
 from typing import Union
 
 from bot.llm import (
@@ -12,6 +11,7 @@ from bot.llm import (
 )
 from bot.llm.gemini import response_content as content
 from bot.types import LLMEngine
+from ...common.logger import get_component_logger
 
 from .exceptions import GeminiSummarizerVerificationError
 from .prompts.verification import (
@@ -21,7 +21,7 @@ from .prompts.verification import (
 from .types import ActorWorkItem
 from . import agents_config
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("downloader.agent.verifier")
 
 class VerifiedSummary(BaseStructuredOutput):
     """Structured output for summary verification."""
@@ -77,7 +77,8 @@ class SummaryVerifier(GeminiChatModel):
             keep_raw_engine_responses=config.keep_raw_engine_responses,
             raw_engine_responses_dir=config.raw_engine_responses_dir,
             request_limit=config.request_limit,
-            request_limit_period_seconds=config.request_limit_period_seconds
+            request_limit_period_seconds=config.request_limit_period_seconds,
+            logger=logger
         )
         super().__init__(model_config)
 
@@ -116,13 +117,6 @@ if __name__ == "__main__":
     from bot.llm import initialize
     from .prompts.tests import test_article, test_summary
     from .types import ActorWorkItem
-
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler()]
-    )
 
     # Initialize LLM
     initialize()

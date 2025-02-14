@@ -1,8 +1,10 @@
+"""Agent actor functionality for news processing."""
+
 from datetime import datetime
-import logging
 from typing import Dict, Union
 
 from bot.llm import BaseResponseError
+from ...common.logger import get_component_logger
 from .categorizer import Categorizer
 from .summarizer import Summarizer
 from .summary_verifier import SummaryVerifier
@@ -10,7 +12,7 @@ from .translator import Translator
 from .exceptions import GeminiBaseError
 from .types import ActorWorkItem, ArticleSummary, ArticleCategory
 
-logger = logging.getLogger(__name__)
+logger = get_component_logger("downloader.agent.actor")
 
 def categorize_article(article: str, existing_categories: Dict[str, str], session_id: str = "") -> Union[ArticleCategory, BaseResponseError]:
     """Process a Spanish news article to determine its category.
@@ -120,12 +122,6 @@ if __name__ == "__main__":
     from bot.llm import initialize
     from .prompts.category import initial_existing_categories_to_map
     from .prompts.tests import test_article
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler()]
-    )
 
     initialize()
 

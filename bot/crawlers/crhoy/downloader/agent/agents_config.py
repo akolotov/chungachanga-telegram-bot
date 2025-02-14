@@ -1,7 +1,6 @@
 """Configuration for Gemini agents."""
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from ...settings import settings
 

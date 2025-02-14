@@ -104,6 +104,7 @@ class ChatModel(BaseChatModel):
             generation_config.response_mime_type = "application/json"
 
         self._generation_config = generation_config
+        self._logger = config.logger or logging.getLogger(self.__class__.__module__)
 
         model_args = {"model_name": config.llm_model_name}
         if config.system_prompt:
@@ -136,16 +137,14 @@ class ChatModel(BaseChatModel):
             GeminiChatModelResponse: The response from the Gemini model
         """
         if not is_initialized():
-            logger.error("Gemini API not initialized. Call initialize() first.")
+            self._logger.error("Gemini API not initialized. Call initialize() first.")
             return GeminiChatModelResponse(
                 success=False,
                 failure_reason=("Initialization Error", "Gemini API not initialized. Call initialize() first.")
             )
 
-        logger = logging.getLogger(self.__class__.__module__)
-
         # Before adding to history, check rate limit
-        self._rate_limiter.acquire(logger=logger)
+        self._rate_limiter.acquire(logger=self._logger)
 
         # Add prompt to history
         prompt_content = protos.Content(
@@ -164,7 +163,7 @@ class ChatModel(BaseChatModel):
             # Roll back the prompt from history on error to avoid keeping prompts without
             # responses in history
             self._history.pop()
-            logger.error(f"Error generating response: {e}")
+            self._logger.error(f"Error generating response: {e}")
             return GeminiChatModelResponse(
                 success=False,
                 failure_reason=("Error generating response", str(e))
@@ -187,7 +186,7 @@ class ChatModel(BaseChatModel):
             # Roll back the prompt from history on error to avoid keeping prompts without
             # responses in history
             self._history.pop()
-            logger.error(f"Unexpected finish reason: {finish_reason.name}")
+            self._logger.error(f"Unexpected finish reason: {finish_reason.name}")
             return GeminiChatModelResponse(
                 success=False,
                 failure_reason=("Unexpected finish reason", finish_reason.name)
