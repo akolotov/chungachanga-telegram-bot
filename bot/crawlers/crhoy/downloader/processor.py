@@ -45,10 +45,6 @@ def _get_news_to_process(
     """
     # Get trigger time info to determine the window for recent news
     trigger_info = get_trigger_time_info()
-    # Shift back by 2 * check_updates_interval to match notifier behavior
-    shifted_previous = trigger_info.previous - timedelta(
-        seconds=2 * settings.check_updates_interval
-    )
 
     # Query for recent unprocessed news (within notification window)
     recent_query = (
@@ -56,7 +52,7 @@ def _get_news_to_process(
         .where(CRHoyNews.filename == "")
         .where(CRHoyNews.skipped == False)  # noqa: E712
         .where(CRHoyNews.failed == False)   # noqa: E712
-        .where(CRHoyNews.timestamp >= shifted_previous)
+        .where(CRHoyNews.timestamp >= trigger_info.shifted_previous)
         .order_by(CRHoyNews.timestamp)  # Oldest first for recent news
         .limit(chunk_size)
     )
@@ -70,7 +66,7 @@ def _get_news_to_process(
             .where(CRHoyNews.filename == "")
             .where(CRHoyNews.skipped == False)  # noqa: E712
             .where(CRHoyNews.failed == False)   # noqa: E712
-            .where(CRHoyNews.timestamp < shifted_previous)
+            .where(CRHoyNews.timestamp < trigger_info.shifted_previous)
             .order_by(CRHoyNews.timestamp.desc())  # Newest first for older news
             .limit(remaining_capacity)
         )

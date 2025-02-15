@@ -49,30 +49,23 @@ async def process_news_batch(
     """
     now = datetime.now(COSTA_RICA_TIMEZONE)
     
-    # Shift the previous time back by 2 * CHECK_UPDATES_INTERVAL to account for
-    # async nature of synchronizer and downloader
-    shifted_previous = trigger_info.previous - timedelta(
-        seconds=2 * settings.check_updates_interval
-    )
-    
     logger.info(
-        "Processing news batch from %s (shifted from %s) up to current time %s",
-        shifted_previous.isoformat(),
-        trigger_info.previous.isoformat(),
+        "Processing news batch from %s up to current time %s",
+        trigger_info.shifted_previous.isoformat(),
         now.isoformat()
     )
     
     # Step 3: Delete old sent news records
     if not dry_run:
-        delete_old_sent_news(session, shifted_previous)
-        logger.info("Deleted old sent news records before %s", shifted_previous)
+        delete_old_sent_news(session, trigger_info.shifted_previous)
+        logger.info("Deleted old sent news records before %s", trigger_info.shifted_previous)
     
     # Step 4: Get list of already sent news IDs
-    sent_ids = get_sent_news_ids(session, shifted_previous)
+    sent_ids = get_sent_news_ids(session, trigger_info.shifted_previous)
     logger.info("Found %d already sent news in current window", len(sent_ids))
     
     # Step 5: Get list of news to send
-    news_to_send = get_news_to_send(session, shifted_previous, sent_ids)
+    news_to_send = get_news_to_send(session, trigger_info.shifted_previous, sent_ids)
     logger.info("Found %d news to send", len(news_to_send))
     
     # Steps 6-12: Process each news article
