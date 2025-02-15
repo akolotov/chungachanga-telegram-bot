@@ -322,6 +322,7 @@ def analyze_news(
 
 if __name__ == "__main__":
     import sys
+    import argparse
     from ..common.db import db_session, init_db
     from ..settings import settings
     from bot.llm import initialize
@@ -329,37 +330,57 @@ if __name__ == "__main__":
     # Initialize LLM engine
     initialize()
 
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Analyze CRHoy news articles')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--url', help='URL of specific news article to analyze')
+    group.add_argument('--id', type=int, help='ID of specific news article to analyze')
+    parser.add_argument('--force', action='store_true', help='Force analysis regardless of age')
+    args = parser.parse_args()
+
     try:
         # Initialize database with URL from settings
         init_db(settings.database_url)
-        
-        # Get command line arguments
-        force = "--force" in sys.argv
 
         with db_session() as session:
-            # Find the most recent news that has content but hasn't been analyzed
+            # Build base query
             query = (
                 select(CRHoyNews)
                 .where(CRHoyNews.filename != "")  # Has content
                 .where(CRHoyNews.failed == False)  # noqa: E712
                 .where(CRHoyNews.skipped == False)  # noqa: E712
-                .order_by(CRHoyNews.timestamp.desc())
-                .limit(1)
             )
+
+            # Modify query based on arguments
+            if args.url:
+                query = query.where(CRHoyNews.url == args.url)
+            elif args.id:
+                query = query.where(CRHoyNews.id == args.id)
+            else:
+                # Default behavior: get most recent
+                query = query.order_by(CRHoyNews.timestamp.desc())
+                
+            query = query.limit(1)
             
             news = session.execute(query).scalar_one_or_none()
             if not news:
-                print("No unanalyzed news articles found", file=sys.stderr)
+                error_msg = "No matching news article found"
+                if args.url:
+                    error_msg += f" for URL: {args.url}"
+                elif args.id:
+                    error_msg += f" for ID: {args.id}"
+                print(error_msg, file=sys.stderr)
                 sys.exit(1)
 
-            print(f"\nAnalyzing most recent news:")
+            print(f"\nAnalyzing news article:")
             print(f"ID: {news.id}")
+            print(f"URL: {news.url}")
             print(f"Timestamp: {news.timestamp.astimezone(COSTA_RICA_TIMEZONE)}")
             print(f"Filename: {news.filename}")
-            print(f"Force: {force}")
+            print(f"Force: {args.force}")
             
             # Run analysis
-            analyze_news(news, session, force)
+            analyze_news(news, session, args.force)
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
