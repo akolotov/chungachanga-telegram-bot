@@ -1,6 +1,6 @@
 """News downloading and processing functionality for CRHoy crawler."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Set, Tuple, Dict
 
@@ -11,6 +11,7 @@ from ..common.db import db_session
 from ..common.logger import get_component_logger
 from ..common.models import CRHoyNews, CRHoyNewsCategories
 from ..common.constants import CRHOY_REQUEST_HEADERS
+from ..common.utils import get_trigger_time_info
 from ..settings import settings
 from bot.web_parsers.crhoy import parse_article
 from bot.web_parsers.helper import WebDownloadError, WebParserError
@@ -30,27 +31,56 @@ def _get_news_to_process(
 ) -> List[CRHoyNews]:
     """
     Get a chunk of unprocessed news that should be downloaded.
+    Combines two sets of records:
+    1. Most recent unprocessed news within current notification window
+    2. Older unprocessed news in reverse chronological order
 
     Args:
         session: Database session
         chunk_size: Maximum number of news to return
 
     Returns:
-        List of news entries to process, ordered by timestamp descending (most recent first)
+        List of news entries to process, ordered by timestamp
+        (older to newer for recent news, newer to older for old news)
     """
-    # Base query for unprocessed news - no category filtering here
-    query = (
+    # Get trigger time info to determine the window for recent news
+    trigger_info = get_trigger_time_info()
+    # Shift back by 2 * check_updates_interval to match notifier behavior
+    shifted_previous = trigger_info.previous - timedelta(
+        seconds=2 * settings.check_updates_interval
+    )
+
+    # Query for recent unprocessed news (within notification window)
+    recent_query = (
         select(CRHoyNews)
         .where(CRHoyNews.filename == "")
         .where(CRHoyNews.skipped == False)  # noqa: E712
         .where(CRHoyNews.failed == False)   # noqa: E712
-        # The logic to pickup news must be inline with the notifier: earliest news first
-        # Otherwise, notifications for older news will be sent after more recent news.
-        .order_by(CRHoyNews.timestamp)
+        .where(CRHoyNews.timestamp >= shifted_previous)
+        .order_by(CRHoyNews.timestamp)  # Oldest first for recent news
         .limit(chunk_size)
     )
+    recent_news = list(session.execute(recent_query).scalars().all())
 
-    return list(session.execute(query).scalars().all())
+    # If we have capacity for more news, get older news in reverse order
+    remaining_capacity = chunk_size - len(recent_news)
+    if remaining_capacity > 0:
+        older_query = (
+            select(CRHoyNews)
+            .where(CRHoyNews.filename == "")
+            .where(CRHoyNews.skipped == False)  # noqa: E712
+            .where(CRHoyNews.failed == False)   # noqa: E712
+            .where(CRHoyNews.timestamp < shifted_previous)
+            .order_by(CRHoyNews.timestamp.desc())  # Newest first for older news
+            .limit(remaining_capacity)
+        )
+        older_news = list(session.execute(older_query).scalars().all())
+    else:
+        older_news = []
+
+    # Combine both lists - recent news first (ordered old to new),
+    # then older news (ordered new to old)
+    return recent_news + older_news
 
 
 def _get_news_categories(
