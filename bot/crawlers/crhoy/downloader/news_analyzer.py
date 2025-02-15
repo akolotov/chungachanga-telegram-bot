@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -101,7 +102,8 @@ def _save_summary(
 def _prepare_summaries(
     news: CRHoyNews,
     content: str,
-    data_dir: Path
+    data_dir: Path,
+    session_id: str
 ) -> dict[str, CRHoySummary]:
     """Create, save, and prepare database records for news summaries.
     
@@ -114,6 +116,7 @@ def _prepare_summaries(
         news: News entry being analyzed
         content: Content of the news article
         data_dir: Base directory for storing data
+        session_id: Unique identifier for tracking related agent responses
         
     Returns:
         Dictionary mapping language codes to CRHoySummary records
@@ -123,7 +126,7 @@ def _prepare_summaries(
     """
     # Create summaries
     try:
-        summary_result = summarize_article(content, "Russian")
+        summary_result = summarize_article(content, "Russian", session_id)
         if isinstance(summary_result, BaseResponseError):
             raise NewsAnalyzerError(f"Summary creation failed: {summary_result.error}")
     except Exception as e:
@@ -214,9 +217,12 @@ def analyze_news(
         smart_categories = _get_smart_categories(session)
         ignored_categories = _get_ignored_categories(session)
         
+        # Create analyzer session ID
+        analyzer_session_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{news.id}"
+        
         # Analyze category
         try:
-            category_result = categorize_article(content, smart_categories)
+            category_result = categorize_article(content, smart_categories, analyzer_session_id)
             if isinstance(category_result, BaseResponseError):
                 raise NewsAnalyzerError(f"Category analysis failed: {category_result.error}")
         except Exception as e:
@@ -268,7 +274,7 @@ def analyze_news(
             return
             
         # Create and save summaries
-        summaries = _prepare_summaries(news, content, settings.data_dir)
+        summaries = _prepare_summaries(news, content, settings.data_dir, analyzer_session_id)
             
         # Update database in one transaction
         try:
