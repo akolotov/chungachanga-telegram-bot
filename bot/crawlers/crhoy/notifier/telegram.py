@@ -49,10 +49,10 @@ def format_news_message(news: NewsMessageData) -> str:
         
     Returns:
         Formatted message string in the format:
-        _YYYY/MM/DD HH:MM_  # Italic timestamp in Costa Rica timezone
-        
         {summary}
-        
+
+        _YYYY/MM/DD HH:MM_  # Italic timestamp in Costa Rica timezone
+                
         {url}
         #{parent_category} #{child_category}  # if category has parent/child
         #{category}  # if category is single-level
@@ -77,7 +77,7 @@ def format_news_message(news: NewsMessageData) -> str:
         hashtags = f"\\#{escape_markdown_v2(news.smart_category)}"
     
     # Combine all parts with required spacing
-    return f"{timestamp_str}\n\n{summary}\n\n{url}\n\n{hashtags}"
+    return f"{summary}\n\n{timestamp_str}\n\n{url}\n\n{hashtags}"
 
 
 async def send_news_message(
