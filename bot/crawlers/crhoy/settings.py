@@ -3,7 +3,7 @@
 from datetime import date, time
 from pathlib import Path
 import json
-from typing import Optional, Set, List
+from typing import Optional, Set, List, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -195,14 +195,14 @@ class CRHoyCrawlerSettings(BaseSettings):
     )
 
     @field_validator("ignore_categories", mode="before")
-    def parse_ignore_categories(cls, v: str | Set[str]) -> Set[str]:
+    def parse_ignore_categories(cls, v: Union[str, Set[str]]) -> Set[str]:
         """Parse comma-separated string of categories into a set."""
         if isinstance(v, str):
             return {cat.strip() for cat in v.split(",") if cat.strip()}
         return v
 
     @field_validator("first_day", mode="before")
-    def parse_first_day(cls, v: str | None | date) -> Optional[date]:
+    def parse_first_day(cls, v: Union[str, None, date]) -> Optional[date]:
         """Parse date string into date object."""
         if isinstance(v, str):
             try:
@@ -213,12 +213,12 @@ class CRHoyCrawlerSettings(BaseSettings):
         return v
 
     @field_validator("data_dir", mode="before")
-    def parse_data_dir(cls, v: str | Path) -> Path:
+    def parse_data_dir(cls, v: Union[str, Path]) -> Path:
         """Convert string path to Path object."""
         return Path(v) if isinstance(v, str) else v
 
     @field_validator("notifier_trigger_times", mode="before")
-    def parse_trigger_times(cls, v: str | List[time]) -> List[time]:
+    def parse_trigger_times(cls, v: Union[str, List[time]]) -> List[time]:
         """Parse JSON string of trigger times into a list of time objects.
         
         The times are assumed to be in Costa Rica timezone (America/Costa_Rica).
