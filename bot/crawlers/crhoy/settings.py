@@ -31,6 +31,13 @@ class CRHoyCrawlerSettings(BaseSettings):
         validation_alias="NEWS_NOTIFIER_TRIGGER_TIMES"
     )
 
+    notifier_max_inactivity_interval: int = Field(
+        default=300,  # 5 minutes
+        description="Maximum time in seconds that the notifier can sleep without checking for trigger times",
+        validation_alias="NEWS_NOTIFIER_MAX_INACTIVITY_INTERVAL",
+        gt=0
+    )
+
     # Telegram notifier bot settings
     notifier_telegram_bot_token: str = Field(
         default="",

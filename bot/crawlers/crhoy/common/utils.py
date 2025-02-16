@@ -181,16 +181,20 @@ def sleep_until_next_check(interval: float) -> None:
     """
     Sleep until next check interval or until exit is requested.
     Breaks early if shutdown is requested.
+    Uses monotonic clock to handle system sleep/hibernate and time adjustments correctly.
     
     Args:
         interval: Time to sleep in seconds
     """
-    # Sleep in small intervals to check exit flag more frequently
-    remaining = interval
-    while remaining > 0 and not state.is_shutdown_requested():
+    target_time = time.monotonic() + interval
+
+    logger.info("Sleeping until %s", datetime.now(COSTA_RICA_TIMEZONE) + timedelta(seconds=interval))
+    
+    while time.monotonic() < target_time and not state.is_shutdown_requested():
+        remaining = target_time - time.monotonic()
         sleep_time = min(1, remaining)  # Sleep max 1 second at a time
-        time.sleep(sleep_time)
-        remaining -= sleep_time 
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 
 
 def ensure_costa_rica_timezone(dt: datetime) -> datetime:

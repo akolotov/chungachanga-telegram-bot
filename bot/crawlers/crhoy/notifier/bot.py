@@ -2,7 +2,7 @@
 
 import asyncio
 import signal
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from telegram import Bot
@@ -26,90 +26,29 @@ class NotifierBot:
         if not settings.notifier_telegram_bot_token:
             raise ValueError("Telegram bot token not configured")
             
-        self._current_task: Optional[asyncio.Task] = None
-        self._next_task: Optional[asyncio.Task] = None
         self._shutdown_event = asyncio.Event()
         self._bot = Bot(token=settings.notifier_telegram_bot_token)
         
-    async def _execute_routine(self, scheduled_time: datetime) -> None:
-        """Execute a single routine at the scheduled time.
+        # Initialize with a very old date to ensure first run processes news
+        self._previous_run = datetime(1970, 1, 1, tzinfo=COSTA_RICA_TIMEZONE)
+        
+    async def _execute_routine(self, current_time: datetime) -> None:
+        """Execute a single routine at the specified time.
         
         Args:
-            scheduled_time: When this routine was scheduled to run
+            current_time: Time for which to execute the routine
         """
         try:
-            logger.info("Starting routine scheduled for %s", scheduled_time.isoformat())
-            await process_recent_news(bot=self._bot, current_time=scheduled_time)
-            logger.info("Completed routine scheduled for %s", scheduled_time.isoformat())
+            logger.info("Starting routine for %s", current_time.isoformat())
+            await process_recent_news(bot=self._bot, current_time=current_time)
+            logger.info("Completed routine for %s", current_time.isoformat())
             
         except Exception as e:
             logger.error(
-                "Error in routine scheduled for %s: %s",
-                scheduled_time.isoformat(), str(e),
+                "Error in routine for %s: %s",
+                current_time.isoformat(), str(e),
                 exc_info=True
             )
-            
-        finally:
-            # Clear the current task reference
-            self._current_task = None
-    
-    def _schedule_next_routine(self, after_time: datetime) -> None:
-        """Schedule the next routine to run after the given time.
-        
-        Args:
-            after_time: Schedule next routine after this time
-        """
-        # Get next trigger time
-        trigger_info = get_trigger_time_info(after_time)
-        next_time = trigger_info.next
-        
-        # Calculate delay until next run
-        now = datetime.now(COSTA_RICA_TIMEZONE)
-        delay = (next_time - now).total_seconds()
-        if delay < 0:
-            # If we're already past the next time, schedule immediately
-            delay = 0
-            next_time = now
-        
-        logger.info(
-            "Scheduling next routine for %s (in %.1f seconds)",
-            next_time.isoformat(), delay
-        )
-        
-        # Create and schedule the next task
-        async def delayed_routine():
-            try:
-                # Wait until the scheduled time
-                await asyncio.sleep(delay)
-                
-                # Check if we should still run
-                if self._shutdown_event.is_set():
-                    logger.info("Shutdown requested, cancelling scheduled routine")
-                    return
-                
-                # If there's a current task running, wait for it
-                if self._current_task and not self._current_task.done():
-                    logger.info(
-                        "Previous routine still running, waiting for completion"
-                    )
-                    try:
-                        await self._current_task
-                    except Exception:
-                        # Previous task errors are already logged
-                        pass
-                
-                # Become the current task and run
-                self._current_task = asyncio.current_task()
-                await self._execute_routine(next_time)
-                
-            finally:
-                # Schedule the next routine before we finish
-                if not self._shutdown_event.is_set():
-                    self._schedule_next_routine(next_time)
-                self._next_task = None
-        
-        # Schedule the next task
-        self._next_task = asyncio.create_task(delayed_routine())
     
     async def run(self) -> None:
         """Run the bot until shutdown is requested."""
@@ -119,32 +58,42 @@ class NotifierBot:
             # Initialize database
             init_db(settings.database_url)
             
-            # Execute first routine immediately with current time
-            now = datetime.now(COSTA_RICA_TIMEZONE)
-            self._current_task = asyncio.create_task(self._execute_routine(now))
-            
-            # Schedule next routine
-            self._schedule_next_routine(now)
-            
-            # Wait for shutdown
-            await self._shutdown_event.wait()
-            
-            # Wait for current routine to finish if any
-            if self._current_task and not self._current_task.done():
-                logger.info("Waiting for current routine to complete")
-                try:
-                    await self._current_task
-                except Exception:
-                    # Errors are already logged
-                    pass
-            
-            # Cancel next scheduled routine if any
-            if self._next_task and not self._next_task.done():
-                self._next_task.cancel()
-                try:
-                    await self._next_task
-                except asyncio.CancelledError:
-                    pass
+            # Main control loop
+            while not self._shutdown_event.is_set():
+                current_time = datetime.now(COSTA_RICA_TIMEZONE)
+                trigger_info = get_trigger_time_info(current_time)
+                
+                if trigger_info.current >= self._previous_run:
+                    # Time to execute a routine
+                    self._previous_run = current_time
+                    await self._execute_routine(current_time)
+                    logger.info(
+                        "Next trigger scheduled for %s",
+                        trigger_info.next.isoformat()
+                    )
+                else:
+                    # Calculate sleep duration
+                    time_to_next = (trigger_info.next - current_time).total_seconds()
+                    max_sleep = settings.notifier_max_inactivity_interval
+                    sleep_duration = min(max_sleep, max(0, time_to_next))
+                    
+                    logger.debug(
+                        "Waiting %.1f seconds (next trigger at %s)",
+                        int(sleep_duration),
+                        trigger_info.next.isoformat()
+                    )
+                    
+                    try:
+                        # Wait for either sleep_duration or shutdown
+                        await asyncio.wait_for(
+                            self._shutdown_event.wait(),
+                            timeout=sleep_duration
+                        )
+                    except asyncio.TimeoutError:
+                        # Normal timeout, continue loop
+                        pass
+                    
+            logger.info("Shutdown requested, stopping bot")
             
         except Exception as e:
             logger.error("Fatal error in bot: %s", str(e), exc_info=True)
