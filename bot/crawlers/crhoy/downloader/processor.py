@@ -11,7 +11,7 @@ from ..common.db import db_session
 from ..common.logger import get_component_logger
 from ..common.models import CRHoyNews, CRHoyNewsCategories
 from ..common.constants import CRHOY_REQUEST_HEADERS
-from ..common.utils import get_trigger_time_info
+from ..common.utils import get_trigger_time_info, ensure_costa_rica_timezone
 from ..settings import settings
 from bot.web_parsers.crhoy import parse_article
 from bot.web_parsers.helper import WebDownloadError, WebParserError
@@ -114,8 +114,8 @@ def _prepare_news_path(news: CRHoyNews) -> Path:
     Returns:
         Path where news content should be saved
     """
-    # Convert timestamp to components
-    dt = news.timestamp.astimezone()  # Use news timezone
+    # Convert timestamp to components using Costa Rica timezone
+    dt = ensure_costa_rica_timezone(news.timestamp)
     date_str = dt.strftime("%Y-%m-%d")
     time_str = dt.strftime("%H-%M")
 

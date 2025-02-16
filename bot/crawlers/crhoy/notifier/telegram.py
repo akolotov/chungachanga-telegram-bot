@@ -13,6 +13,7 @@ from ..settings import settings
 from ..common.logger import get_component_logger
 from .types import NewsMessageData
 from ..common.constants import COSTA_RICA_TIMEZONE
+from ..common.utils import ensure_costa_rica_timezone
 
 
 logger = get_component_logger("notifier.sender")
@@ -57,10 +58,7 @@ def format_news_message(news: NewsMessageData) -> str:
         #{category}  # if category is single-level
     """
     # Ensure timestamp is in Costa Rica timezone
-    if news.timestamp.tzinfo != COSTA_RICA_TIMEZONE:
-        timestamp = news.timestamp.astimezone(COSTA_RICA_TIMEZONE)
-    else:
-        timestamp = news.timestamp
+    timestamp = ensure_costa_rica_timezone(news.timestamp)
     
     # Format timestamp in Costa Rica time
     # Escape special chars first, then wrap in italic markers

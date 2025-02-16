@@ -191,3 +191,17 @@ def sleep_until_next_check(interval: float) -> None:
         sleep_time = min(1, remaining)  # Sleep max 1 second at a time
         time.sleep(sleep_time)
         remaining -= sleep_time 
+
+
+def ensure_costa_rica_timezone(dt: datetime) -> datetime:
+    """Ensure datetime is in Costa Rica timezone.
+    
+    Args:
+        dt: Datetime to convert
+        
+    Returns:
+        Datetime in Costa Rica timezone
+    """
+    if dt.tzinfo != COSTA_RICA_TIMEZONE:
+        return dt.astimezone(COSTA_RICA_TIMEZONE)
+    return dt 

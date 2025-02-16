@@ -9,8 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..common.logger import get_component_logger
 from ..common.models import CRHoyNews, CRHoySmartCategories, CRHoySummary, CRHoyNotifierNews
-from ..common.utils import get_trigger_time_info
-from ..common.constants import COSTA_RICA_TIMEZONE
+from ..common.utils import get_trigger_time_info, ensure_costa_rica_timezone
 from ..settings import settings
 from .agent import categorize_article, summarize_article, ArticleRelation, UNKNOWN_CATEGORY
 from bot.llm import BaseResponseError
@@ -73,8 +72,8 @@ def _save_summary(
         NewsAnalyzerError: If saving fails
     """
     try:
-        # Convert timestamp to components
-        dt = news.timestamp.astimezone()  # Use news timezone
+        # Convert timestamp to components using Costa Rica timezone
+        dt = ensure_costa_rica_timezone(news.timestamp)
         date_str = dt.strftime("%Y-%m-%d")
         time_str = dt.strftime("%H-%M")
         
@@ -181,8 +180,8 @@ def analyze_news(
             trigger_info = get_trigger_time_info()
             if news.timestamp < trigger_info.previous:
                 # Convert both timestamps to Costa Rica time for consistent logging
-                news_cr_time = news.timestamp.astimezone(COSTA_RICA_TIMEZONE)
-                prev_cr_time = trigger_info.previous.astimezone(COSTA_RICA_TIMEZONE)
+                news_cr_time = ensure_costa_rica_timezone(news.timestamp)
+                prev_cr_time = ensure_costa_rica_timezone(trigger_info.previous)
                 logger.debug(
                     f"Skipping news {news.id} as it's too old "
                     f"(news time: {news_cr_time}, previous trigger: {prev_cr_time})"
@@ -218,6 +217,8 @@ def analyze_news(
         ignored_categories = _get_ignored_categories(session)
         
         # Create analyzer session ID
+        # No need to use time adjusted by time zone since session_id is used
+        # only for logging purposes
         analyzer_session_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{news.id}"
         
         # Analyze category
@@ -375,7 +376,7 @@ if __name__ == "__main__":
             print(f"\nAnalyzing news article:")
             print(f"ID: {news.id}")
             print(f"URL: {news.url}")
-            print(f"Timestamp: {news.timestamp.astimezone(COSTA_RICA_TIMEZONE)}")
+            print(f"Timestamp: {ensure_costa_rica_timezone(news.timestamp)}")
             print(f"Filename: {news.filename}")
             print(f"Force: {args.force}")
             
