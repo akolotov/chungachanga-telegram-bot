@@ -53,26 +53,40 @@ def check_internet_connection(timeout: float = 5) -> bool:
 
 def check_api_availability(timeout: float = DEFAULT_TIMEOUT) -> bool:
     """
-    Check if CRHoy API is available.
-    Any response from the server (even errors) indicates availability.
-    Only connection errors indicate unavailability.
-
+    Check if CRHoy API is available based on the response to an OPTIONS request.
+    
+    If the API is accessible, the server should return a 405 Not Allowed error,
+    indicating that the endpoint exists but does not allow the OPTIONS method.
+    
+    If the API is blocked (e.g., due to geo-restrictions), the response will be a 403
+    with a plain text error message (including "error code: 1005").
+    
     Args:
         timeout: Request timeout in seconds
-
+        
     Returns:
-        True if API server responds (even with error), False if connection fails
+        True if the API is considered accessible, False otherwise.
     """
+    endpoint = urljoin(CRHOY_API_BASE_URL, "ultimas/")
     try:
-        requests.head(
-            CRHOY_API_BASE_URL,
-            timeout=timeout,
-            allow_redirects=True
-        )
-        # Any response (even error) means server is up
-        return True
-    except RequestException:
-        # Only connection errors mean server is down
+        response = requests.options(endpoint, timeout=timeout, allow_redirects=True)
+        # When accessible, we expect a 405 Not Allowed with HTML content (nginx)
+        if response.status_code in (405, 200):
+            return True
+        
+        # When not accessible, a 403 is returned with error details in plain text
+        elif response.status_code == 403:
+            # Optionally, check if the content indicates a geo-block or Cloudflare error (e.g., error code 1005)
+            # if "error code: 1005" in response.text.lower():
+            #     return False
+            return False
+        
+        # For any other status codes, assume the API is not accessible
+        else:
+            return False
+        
+    except requests.RequestException:
+        # Network or connection errors imply the API is unreachable
         return False
 
 
@@ -160,3 +174,17 @@ def fetch_news_metadata(
                 raise ConnectionError(f"Failed to fetch metadata after {retries} attempts: {e}")
     
     raise ConnectionError(f"Failed to fetch metadata after {retries} attempts")
+
+
+if __name__ == "__main__":
+    # Test API and website availability
+    print("Testing services availability...")
+
+    internet_available = check_internet_connection()
+    print(f"Internet Available: {internet_available}")
+    
+    api_available = check_api_availability()
+    print(f"API Available: {api_available}")
+    
+    website_available = check_website_availability()
+    print(f"Website Available: {website_available}")
