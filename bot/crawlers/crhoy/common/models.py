@@ -9,7 +9,7 @@ class CRHoyNews(Base):
     
     Fields:
         id (int): Primary key, matches the 'id' field from CRHoy's metadata API
-        url (str): Full URL to the news article, unique, matches the 'url' field from metadata
+        url (str): Full URL to the news article, matches the 'url' field from metadata
         timestamp (datetime): Combined date and hour from metadata with Costa Rica timezone 
                             (e.g., 2025-02-06 09:01:00-06)
         filename (str): Path to the markdown file containing the news content, 
@@ -23,7 +23,7 @@ class CRHoyNews(Base):
     __tablename__ = 'crhoy_news'
 
     id = Column(Integer, primary_key=True)
-    url = Column(String, unique=True, nullable=False)
+    url = Column(String, nullable=False)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     filename = Column(String)
     skipped = Column(Boolean, default=False, nullable=False)
