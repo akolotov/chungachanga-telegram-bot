@@ -28,6 +28,7 @@ class NotifierBot:
             
         self._shutdown_event = asyncio.Event()
         self._bot = Bot(token=settings.notifier_telegram_bot_token)
+        self._telegram_connection_lost = False
         
         # Initialize with a very old date to ensure first run processes news
         self._previous_run = datetime(1970, 1, 1, tzinfo=COSTA_RICA_TIMEZONE)
@@ -64,35 +65,46 @@ class NotifierBot:
                 trigger_info = get_trigger_time_info(current_time)
                 
                 if trigger_info.current >= self._previous_run:
-                    # Time to execute a routine
-                    self._previous_run = current_time
-                    await self._execute_routine(current_time)
-                    logger.info(
-                        "Next trigger scheduled for %s",
-                        trigger_info.next.isoformat()
-                    )
-                else:
-                    # Calculate sleep duration
-                    time_to_next = (trigger_info.next - current_time).total_seconds()
-                    max_sleep = settings.notifier_max_inactivity_interval
-                    sleep_duration = min(max_sleep, max(0, time_to_next))
-                    
-                    logger.debug(
-                        "Waiting %.1f seconds (next trigger at %s)",
-                        int(sleep_duration),
-                        trigger_info.next.isoformat()
-                    )
-                    
+                    # Check Telegram connectivity before proceeding
                     try:
-                        # Wait for either sleep_duration or shutdown
-                        await asyncio.wait_for(
-                            self._shutdown_event.wait(),
-                            timeout=sleep_duration
+                        await self._bot.get_me()
+                        if self._telegram_connection_lost:
+                            logger.info("Telegram connection restored")
+                            self._telegram_connection_lost = False
+                    except Exception as e:
+                        if not self._telegram_connection_lost:
+                            logger.error("Failed to connect to Telegram: %s", str(e))
+                            self._telegram_connection_lost = True
+                    else:
+                        # Time to execute a routine
+                        self._previous_run = current_time
+                        await self._execute_routine(current_time)
+                        logger.info(
+                            "Next trigger scheduled for %s",
+                            trigger_info.next.isoformat()
                         )
-                    except asyncio.TimeoutError:
-                        # Normal timeout, continue loop
-                        pass
-                    
+
+                # Calculate sleep duration
+                time_to_next = (trigger_info.next - current_time).total_seconds()
+                max_sleep = settings.notifier_max_inactivity_interval
+                sleep_duration = min(max_sleep, max(0, time_to_next))
+                
+                logger.debug(
+                    "Waiting %.1f seconds (next trigger at %s)",
+                    int(sleep_duration),
+                    trigger_info.next.isoformat()
+                )
+                
+                try:
+                    # Wait for either sleep_duration or shutdown
+                    await asyncio.wait_for(
+                        self._shutdown_event.wait(),
+                        timeout=sleep_duration
+                    )
+                except asyncio.TimeoutError:
+                    # Normal timeout, continue loop
+                    pass
+            
             logger.info("Shutdown requested, stopping bot")
             
         except Exception as e:
