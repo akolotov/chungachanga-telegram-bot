@@ -237,7 +237,7 @@ def process_metadata_for_date(
         
         logger.info(
             f"Added {len(news_entries)} news entries and "
-            f"{len(new_categories)} new categories for {target_date}"
+            f"{len(new_categories) - len(existing_categories)} new categories for {target_date}"
         )
         
         return True
