@@ -22,6 +22,67 @@ The class should have a `llm_schema` class method that returns the schema defini
 
 Another class method is `deserialize` that takes the raw model response and deserializes it into the corresponding class instance.
 
+There are two main approaches to handling structured outputs:
+
+#### A. Single Schema (Fixed Output Format)
+
+Best suited when:
+
+- The chat model performs a single, well-defined task
+- All responses follow the same structure
+- System prompt can fully define the expected output format
+- Response processing is consistent across all inputs
+
+Example implementation:
+
+```python
+class MathProblemSolution(BaseStructuredOutput):
+    solution: str
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return content.Schema(
+            type=content.Type.OBJECT,
+            required=["solution"],
+            properties={
+                "solution": content.Schema(type=content.Type.STRING)
+            }
+        )
+```
+
+#### B. Multiple Schemas (Dynamic Output Format)
+
+Preferred when:
+
+- The chat model needs to handle different types of requests
+- Different tasks require different response structures
+- Each task needs its own specific prompt and schema
+- Response processing varies based on the task type
+
+Example implementation:
+
+```python
+class FirstAnalysis(BaseStructuredOutput):
+    count: int
+    items: List[str]
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return first_analysis_schema
+
+class SecondAnalysis(BaseStructuredOutput):
+    summary: str
+    confidence: float
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return second_analysis_schema
+
+# Usage in chat model:
+response1 = chat_model.generate_response(prompt1, response_class=FirstAnalysis)
+response2 = chat_model.generate_response(prompt2, response_class=SecondAnalysis)
+```
+
 ### History
 
 The in-memory history is automatically extended with new prompts and LLM responses.
@@ -52,6 +113,21 @@ Every wrapper provides an `initialize` method that is invoked based on the LLM e
 
 The main use case for the initialization is to set up the API key.
 
+#### Rate Limiting
+
+The chat models implement rate limiting to respect API quotas. Each model type (identified by `llm_model_name`) has its own rate limiter that:
+
+- Tracks the number of requests made within a time window
+- Automatically delays requests when the rate limit would be exceeded
+- Maintains separate limits for different model types (e.g., different Gemini models)
+
+Rate limits can be configured through `ChatModelConfig`:
+
+- `request_limit`: Maximum number of requests allowed per time window
+- `request_limit_period_seconds`: Time window in seconds for the request limit
+
+When the rate limit is reached, the request is automatically delayed until the next time window, rather than failing.
+
 #### Chat Initialization
 
 The chat of a specific engine is operated by the chat model class.
@@ -73,6 +149,105 @@ If the response schema is provided with the generation request, it is added to t
 The `_generate_response` method is responsible for extending the history with the new prompt and calling the corresponding method of the LLM engine with the parameters to generate the response with or without the structured output schema. It also handles error cases (and clears the history), calls `_save_response` of `BaseChatModel` to save the raw response to a file, and returns the result of generation compatible with the `BaseChatModelResponse` class (defined in `bot/llm/types.py`).
 
 If the call to `_generate_response` is successful, `generate_response`, depending on whether the response schema is provided and if it is local for the particular prompt or for the model, calls the `_deserialize_response` method of the chat model to deserialize the structured response into the corresponding class instance. If no response schema is provided, the response is returned as is (as a string).
+
+### Existing Chat Models Usage
+
+The example below are for the Gemini chat model.
+
+```python
+import json
+from typing import Union
+
+from bot.llm import (
+    BaseStructuredOutput,
+    ChatModelConfig,
+    DeserializationError,
+    GeminiChatModel,
+    UnexpectedFinishReason,
+    BaseResponseError
+)
+from bot.llm.gemini import response_content as content
+from bot.types import LLMEngine
+
+
+class MathProblemSolution(BaseStructuredOutput):
+    solution: str
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return content.Schema(
+            type=content.Type.OBJECT,
+            enum=[],
+            required=["answer"],
+            properties={
+                "answer": content.Schema(type=content.Type.STRING)
+            }
+        )
+
+    @classmethod
+    def deserialize(cls, json_str: str, _engine: LLMEngine) -> "MathProblemSolution":
+        try:
+            engine_output = json.loads(json_str)
+
+            return MathProblemSolution(
+                solution=engine_output["answer"]
+            )
+
+        except (json.JSONDecodeError, KeyError) as e:
+            raise DeserializationError(
+                f"Failed to parse Gemini response: {e}")
+
+
+system_prompt = """
+You are a math problem solver.
+
+You will be provided with a number which is the result of a multiplication of two numbers.
+You will need to return the one number that was multiplied by itself to get the result.
+
+Example:
+Input: 16
+Output: 4
+
+Input: 25
+Output: 5
+
+The output must follow the schema provided. Ensure that all fields are present and correctly formatted.
+Schema Description:
+- 'answer': The number that was multiplied by itself to get the result.
+"""
+
+
+class MathProblemSolver(GeminiChatModel):
+    def __init__(self, model_name: str, request_limit: int, request_limit_period: int):
+        model_config = ChatModelConfig(
+            llm_model_name=model_name,
+            temperature=0.2,
+            system_prompt=system_prompt,
+            response_class=MathProblemSolution
+        )
+        super().__init__(model_config)
+
+    def solve(self, prompt: str) -> Union[MathProblemSolution, BaseResponseError]:
+        try:
+            model_response = self.generate_response(prompt)
+        except UnexpectedFinishReason as e:
+            return BaseResponseError(error=f"LLM engine responded with: {e}")
+        except Exception:
+            raise
+
+        return model_response.response
+
+
+if __name__ == "__main__":
+    from bot.llm import initialize
+
+    initialize()
+
+    solver = MathProblemSolver(model_name="gemini-2.0-flash")
+    response = solver.solve("100")
+```
+
+More examples can be found in the `bot/llm/gemini/tests` directory.
 
 ### Implementing New Chat Models
 

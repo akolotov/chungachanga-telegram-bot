@@ -69,8 +69,8 @@ Process:
 
 The output must follow the schema provided. Ensure that all fields are present and correctly formatted.
 Schema Description:
-- 'a_chain_of_thought': Step-by-step evaluation of the summary.
-- 'b_adjustments_required': List of acronyms and abbreviations used in the summary.
+- 'a_chain_of_thought': Step-by-step verification of the summary with respect to the original article.
+- 'b_adjustments_required': True if adjustments in the summary are required, False otherwise.
 - 'c_composed_news': The adjusted version of the summary or an empty string if no adjustments required.
 """
 

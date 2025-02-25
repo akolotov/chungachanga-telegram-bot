@@ -1,0 +1,126 @@
+services:
+  synchronizer:
+    container_name: crhoy_synchronizer
+    image: ghcr.io/akolotov/chungachanga-telegram-bot:${DOCKER_IMAGE_TAG:-latest}
+    volumes:
+      - ./data:/app/data
+    command: ["python", "-m", "bot.crawlers.crhoy.synchronizer.main"]
+    environment:
+      CRHOY_CRAWLER_DATA_DIR: ${CRHOY_CRAWLER_DATA_DIR}
+      CRHOY_CRAWLER_DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      CRHOY_CRAWLER_FIRST_DAY: ${CRHOY_CRAWLER_FIRST_DAY}
+      CRHOY_CRAWLER_CHECK_UPDATES_INTERVAL: ${CRHOY_CRAWLER_CHECK_UPDATES_INTERVAL}
+      CRHOY_CRAWLER_DAYS_CHUNK_SIZE: ${CRHOY_CRAWLER_DAYS_CHUNK_SIZE}
+    depends_on:
+      - db
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  downloader:
+    container_name: crhoy_downloader
+    image: ghcr.io/akolotov/chungachanga-telegram-bot:${DOCKER_IMAGE_TAG:-latest}
+    volumes:
+      - ./data:/app/data
+    command: ["python", "-m", "bot.crawlers.crhoy.downloader.main"]
+    environment:
+      CRHOY_CRAWLER_DATA_DIR: ${CRHOY_CRAWLER_DATA_DIR}
+      CRHOY_CRAWLER_DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      CRHOY_CRAWLER_DOWNLOAD_INTERVAL: ${CRHOY_CRAWLER_DOWNLOAD_INTERVAL}
+      CRHOY_CRAWLER_DOWNLOADS_CHUNK_SIZE: ${CRHOY_CRAWLER_DOWNLOADS_CHUNK_SIZE}
+      CRHOY_CRAWLER_IGNORE_CATEGORIES: ${CRHOY_CRAWLER_IGNORE_CATEGORIES}
+      NEWS_NOTIFIER_TRIGGER_TIMES: ${NEWS_NOTIFIER_TRIGGER_TIMES}
+      AGENT_ENGINE: ${AGENT_ENGINE}
+      AGENT_ENGINE_API_KEY: ${AGENT_ENGINE_API_KEY}
+      AGENT_ENGINE_BASIC_MODEL: ${AGENT_ENGINE_BASIC_MODEL}
+      AGENT_ENGINE_BASIC_MODEL_REQUEST_LIMIT: ${AGENT_ENGINE_BASIC_MODEL_REQUEST_LIMIT}
+      AGENT_ENGINE_BASIC_MODEL_REQUEST_LIMIT_PERIOD_SECONDS: ${AGENT_ENGINE_BASIC_MODEL_REQUEST_LIMIT_PERIOD_SECONDS}
+      AGENT_ENGINE_LIGHT_MODEL: ${AGENT_ENGINE_LIGHT_MODEL}
+      AGENT_ENGINE_LIGHT_MODEL_REQUEST_LIMIT: ${AGENT_ENGINE_LIGHT_MODEL_REQUEST_LIMIT}
+      AGENT_ENGINE_LIGHT_MODEL_REQUEST_LIMIT_PERIOD_SECONDS: ${AGENT_ENGINE_LIGHT_MODEL_REQUEST_LIMIT_PERIOD_SECONDS}
+      KEEP_RAW_ENGINE_RESPONSES: ${KEEP_RAW_ENGINE_RESPONSES}
+      RAW_ENGINE_RESPONSES_DIR: ${RAW_ENGINE_RESPONSES_DIR}
+    depends_on:
+      - db
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  notifier:
+    container_name: chch-notifier
+    image: ghcr.io/akolotov/chungachanga-telegram-bot:${DOCKER_IMAGE_TAG:-latest}
+    volumes:
+      - ./data:/app/data
+    command: ["python", "-m", "bot.crawlers.crhoy.notifier.bot"]
+    environment:
+      CRHOY_CRAWLER_DATA_DIR: ${CRHOY_CRAWLER_DATA_DIR}
+      CRHOY_CRAWLER_DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      NEWS_NOTIFIER_TRIGGER_TIMES: ${NEWS_NOTIFIER_TRIGGER_TIMES}
+      NEWS_NOTIFIER_TELEGRAM_BOT_TOKEN: ${NEWS_NOTIFIER_TELEGRAM_BOT_TOKEN}
+      NEWS_NOTIFIER_TELEGRAM_CHANNEL_ID: ${NEWS_NOTIFIER_TELEGRAM_CHANNEL_ID}
+      CRHOY_CRAWLER_CHECK_UPDATES_INTERVAL: ${CRHOY_CRAWLER_CHECK_UPDATES_INTERVAL}
+    depends_on:
+      - db
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    image: postgres:17
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    command: ["postgres", "-c", "max_connections=250"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Start the database first and wait for it to be ready
+  # docker compose -f docker-compose-crawler-crhoy.yml up -d db
+  # sleep 10  # Give the database time to initialize
+  # Run the import
+  # docker compose -f docker-compose-crawler-crhoy.yml --profile tools up db-import
+  db-import:
+    image: ghcr.io/akolotov/chungachanga-telegram-bot:${DOCKER_IMAGE_TAG:-latest}
+    volumes:
+      - ./data:/app/data
+    command: ["python", "-m", "bot.crawlers.crhoy.tools.db_restore", "--clear-existing"]
+    environment:
+      CRHOY_CRAWLER_DATA_DIR: ${CRHOY_CRAWLER_DATA_DIR}
+      CRHOY_CRAWLER_DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+    depends_on:
+      - db
+    restart: "no"
+    profiles:
+      - tools
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
+
+  # docker compose --profile tools run psql
+  psql:
+    image: postgres:17
+    command: psql -h db -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - db
+    profiles:
+      - tools

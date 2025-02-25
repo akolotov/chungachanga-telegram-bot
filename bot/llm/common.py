@@ -32,8 +32,7 @@ class BaseChatModel:
             os.makedirs(response_dir, exist_ok=True)
             file_path = os.path.join(
                 response_dir,
-                f"{self._agent_id}_{
-                    datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+                f"{self._agent_id}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
             )
             with open(file_path, "w") as f:
                 f.write(str(response))

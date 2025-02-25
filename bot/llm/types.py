@@ -1,5 +1,6 @@
 # Python standard library imports
 from typing import Any, Optional, Tuple
+import logging
 
 # Third-party imports
 from pydantic import BaseModel
@@ -24,6 +25,9 @@ class ChatModelConfig(BaseModel):
         max_tokens (Optional[int]): Maximum number of tokens in the response.
         keep_raw_engine_responses (bool): Whether to keep raw LLM responses.
         raw_engine_responses_dir (str): Directory to save raw LLM responses.
+        request_limit (int): Maximum number of requests allowed per time window for this model
+        request_limit_period_seconds (int): Time window in seconds for the request limit
+        logger (Optional[logging.Logger]): Custom logger instance for the chat model
     """
     session_id: str = ""
     agent_id: str = ""
@@ -34,6 +38,9 @@ class ChatModelConfig(BaseModel):
     max_tokens: Optional[int] = 8192
     keep_raw_engine_responses: bool = False
     raw_engine_responses_dir: str = ""
+    request_limit: int = 10  # Default: 10 requests per minute
+    request_limit_period_seconds: int = 60  # Default: 60 seconds window
+    logger: Optional[logging.Logger] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -60,3 +67,6 @@ class BaseStructuredOutput(BaseModel):
     @classmethod
     def deserialize(cls, _response: str, _engine: LLMEngine) -> "BaseStructuredOutput":
         raise NotImplementedError("Deserialization not implemented for this response")
+    
+class BaseResponseError(BaseModel):
+    error: str

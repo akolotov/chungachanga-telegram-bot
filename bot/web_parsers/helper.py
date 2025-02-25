@@ -8,6 +8,10 @@ class WebParserError(Exception):
     """Custom exception for WebParser errors."""
     pass
 
+class WebDownloadError(WebParserError):
+    """Exception raised when there's an error downloading the web page content."""
+    pass
+
 def get_page_content(url: str, headers: Dict[str, str]) -> str:
     """
     Fetches the content of a web page.
@@ -20,7 +24,7 @@ def get_page_content(url: str, headers: Dict[str, str]) -> str:
         str: The HTML content of the page.
 
     Raises:
-        WebParserError: If there's an error fetching the page.
+        WebDownloadError: If there's an error fetching the page.
     """
     try:
         logger.info(f"Fetching page from {url}.")
@@ -29,4 +33,4 @@ def get_page_content(url: str, headers: Dict[str, str]) -> str:
         return response.content
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to fetch page: {e}")
-        raise WebParserError(f"Failed to fetch page: {e}") 
+        raise WebDownloadError(f"Failed to fetch page: {e}") 

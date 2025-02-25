@@ -11,6 +11,7 @@ from google.generativeai import protos
 
 # Local imports
 from bot.types import LLMEngine
+from bot.llm.ratelimiter import RateLimiter
 
 from ..common import BaseChatModel
 from ..types import BaseStructuredOutput, ChatModelConfig, RawChatModelResponse
@@ -103,13 +104,21 @@ class ChatModel(BaseChatModel):
             generation_config.response_mime_type = "application/json"
 
         self._generation_config = generation_config
+        self._logger = config.logger or logging.getLogger(self.__class__.__module__)
 
-        self.model = genai.GenerativeModel(
-            model_name=config.llm_model_name,
-            system_instruction=config.system_prompt
-        )
+        model_args = {"model_name": config.llm_model_name}
+        if config.system_prompt:
+            model_args["system_instruction"] = config.system_prompt
+        self.model = genai.GenerativeModel(**model_args)
 
         self._history: list[protos.Content] = []
+
+        # Initialize rate limiter with config values
+        self._rate_limiter = RateLimiter.get_instance(
+            model_name=config.llm_model_name,
+            max_requests=config.request_limit,
+            period=config.request_limit_period_seconds
+        )
 
         super().__init__(config)
 
@@ -128,13 +137,14 @@ class ChatModel(BaseChatModel):
             GeminiChatModelResponse: The response from the Gemini model
         """
         if not is_initialized():
-            logger.error("Gemini API not initialized. Call initialize() first.")
+            self._logger.error("Gemini API not initialized. Call initialize() first.")
             return GeminiChatModelResponse(
                 success=False,
                 failure_reason=("Initialization Error", "Gemini API not initialized. Call initialize() first.")
             )
 
-        logger = logging.getLogger(self.__class__.__module__)
+        # Before adding to history, check rate limit
+        self._rate_limiter.acquire(logger=self._logger)
 
         # Add prompt to history
         prompt_content = protos.Content(
@@ -153,7 +163,7 @@ class ChatModel(BaseChatModel):
             # Roll back the prompt from history on error to avoid keeping prompts without
             # responses in history
             self._history.pop()
-            logger.error(f"Error generating response: {e}")
+            self._logger.error(f"Error generating response: {e}")
             return GeminiChatModelResponse(
                 success=False,
                 failure_reason=("Error generating response", str(e))
@@ -176,7 +186,7 @@ class ChatModel(BaseChatModel):
             # Roll back the prompt from history on error to avoid keeping prompts without
             # responses in history
             self._history.pop()
-            logger.error(f"Unexpected finish reason: {finish_reason.name}")
+            self._logger.error(f"Unexpected finish reason: {finish_reason.name}")
             return GeminiChatModelResponse(
                 success=False,
                 failure_reason=("Unexpected finish reason", finish_reason.name)
