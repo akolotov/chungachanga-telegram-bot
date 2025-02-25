@@ -142,7 +142,7 @@ class CRHoyCrawlerSettings(BaseSettings):
     )
 
     agent_engine_basic_model: str = Field(
-        default="gemini-1.5-flash-002",
+        default="gemini-2.0-flash",
         description="Basic model to use for the LLM engine",
         validation_alias="AGENT_ENGINE_BASIC_MODEL"
     )
@@ -162,7 +162,7 @@ class CRHoyCrawlerSettings(BaseSettings):
     )
 
     agent_engine_light_model: str = Field(
-        default="gemini-1.5-pro-002",
+        default="gemini-2.0-flash-lite-preview-02-05",
         description="Lightweight model to use for the LLM engine",
         validation_alias="AGENT_ENGINE_LIGHT_MODEL"
     )

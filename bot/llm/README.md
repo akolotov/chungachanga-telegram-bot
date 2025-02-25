@@ -22,6 +22,67 @@ The class should have a `llm_schema` class method that returns the schema defini
 
 Another class method is `deserialize` that takes the raw model response and deserializes it into the corresponding class instance.
 
+There are two main approaches to handling structured outputs:
+
+#### A. Single Schema (Fixed Output Format)
+
+Best suited when:
+
+- The chat model performs a single, well-defined task
+- All responses follow the same structure
+- System prompt can fully define the expected output format
+- Response processing is consistent across all inputs
+
+Example implementation:
+
+```python
+class MathProblemSolution(BaseStructuredOutput):
+    solution: str
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return content.Schema(
+            type=content.Type.OBJECT,
+            required=["solution"],
+            properties={
+                "solution": content.Schema(type=content.Type.STRING)
+            }
+        )
+```
+
+#### B. Multiple Schemas (Dynamic Output Format)
+
+Preferred when:
+
+- The chat model needs to handle different types of requests
+- Different tasks require different response structures
+- Each task needs its own specific prompt and schema
+- Response processing varies based on the task type
+
+Example implementation:
+
+```python
+class FirstAnalysis(BaseStructuredOutput):
+    count: int
+    items: List[str]
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return first_analysis_schema
+
+class SecondAnalysis(BaseStructuredOutput):
+    summary: str
+    confidence: float
+
+    @classmethod
+    def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
+        return second_analysis_schema
+
+# Usage in chat model:
+response1 = chat_model.generate_response(prompt1, response_class=FirstAnalysis)
+response2 = chat_model.generate_response(prompt2, response_class=SecondAnalysis)
+```
+
 ### History
 
 The in-memory history is automatically extended with new prompts and LLM responses.
