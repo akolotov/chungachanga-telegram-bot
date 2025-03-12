@@ -22,6 +22,8 @@ The class should have a `llm_schema` class method that returns the schema defini
 
 Another class method is `deserialize` that takes the raw model response and deserializes it into the corresponding class instance.
 
+Even if the main model does not natively support structured output functionality, this can be emulated by using a supplementary model. The supplementary model takes the raw output from the main model and formats it according to the required schema, enabling structured outputs with any LLM engine.
+
 There are two main approaches to handling structured outputs:
 
 #### A. Single Schema (Fixed Output Format)
@@ -105,6 +107,8 @@ where `session_id` is optional and, if provided, it is used to organize the file
 
 The `agent_id` is used to distinguish responses from different chats within the same session.
 
+When a supplementary model is used, both the main model's response and the supplementary model's response are saved to the same file. This provides a complete record of the processing chain and helps with debugging the transformation from raw to structured output.
+
 ### Implementation Details
 
 #### Engine Initialization
@@ -128,6 +132,8 @@ Rate limits can be configured through `ChatModelConfig`:
 
 When the rate limit is reached, the request is automatically delayed until the next time window, rather than failing.
 
+When a supplementary model is used, it has its own independent rate limit control. Having separate rate limits ensures that prompts to the supplementary model don't count against the main model's quota.
+
 #### Chat Initialization
 
 The chat of a specific engine is operated by the chat model class.
@@ -138,6 +144,8 @@ At this stage, the system prompt can be provided and the response schema can be 
 
 It also sets up an empty history for the chat.
 
+If a supplementary model is needed, it should be provided at this initialization stage through the `support_model_config` parameter in `ChatModelConfig`. This configuration specifies the model to use for parsing raw responses into structured outputs, along with its own temperature, rate limits, and other settings (see `SupportModelConfig` defined in `bot/llm/types.py`).
+
 To finish initialization with the common functionality for all engines, `__init__` of `BaseChatModel` (defined in `bot/llm/common.py`) is called.
 
 #### Generation
@@ -147,6 +155,14 @@ If it is not redefined in the specific chat model, the `generate_response` metho
 If the response schema is provided with the generation request, it is added to the call to `_generate_response` method of the corresponding chat model.
 
 The `_generate_response` method is responsible for extending the history with the new prompt and calling the corresponding method of the LLM engine with the parameters to generate the response with or without the structured output schema. It also handles error cases (and clears the history), calls `_save_response` of `BaseChatModel` to save the raw response to a file, and returns the result of generation compatible with the `BaseChatModelResponse` class (defined in `bot/llm/types.py`).
+
+When a supplementary model is configured, the generation flow is extended with these additional steps:
+
+1. The main model generates a response without structured output formatting
+2. The raw response is then passed to the supplementary model
+3. The supplementary model, which has a system prompt focused on JSON extraction, formats the raw response according to the specified schema
+4. If the supplementary model successfully formats the response, it substitutes the main model response.
+5. If the supplementary model fails, the error is propagated back to the caller
 
 If the call to `_generate_response` is successful, `generate_response`, depending on whether the response schema is provided and if it is local for the particular prompt or for the model, calls the `_deserialize_response` method of the chat model to deserialize the structured response into the corresponding class instance. If no response schema is provided, the response is returned as is (as a string).
 
