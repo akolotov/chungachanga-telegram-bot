@@ -8,6 +8,22 @@ from pydantic import BaseModel
 # Local imports
 from bot.types import LLMEngine
 
+class SupportModelConfig(BaseModel):
+    """
+    Configuration for a supplementary model used to deserialize LLM responses.
+
+    Attributes:
+        llm_model_name (str): Name of the supplementary LLM model to use
+        temperature (float): Controls randomness in the model's responses.
+            Higher values make output more random, lower values make it more focused
+        request_limit (int): Maximum number of requests allowed per time window for this model
+        request_limit_period_seconds (int): Time window in seconds for the request limit
+    """
+    llm_model_name: str = ""
+    temperature: float = None
+    request_limit: int = 10  # Default: 10 requests per minute
+    request_limit_period_seconds: int = 60  # Default: 60 seconds window
+
 class ChatModelConfig(BaseModel):
     """
     Configuration for a chat model.
@@ -28,6 +44,8 @@ class ChatModelConfig(BaseModel):
         request_limit (int): Maximum number of requests allowed per time window for this model
         request_limit_period_seconds (int): Time window in seconds for the request limit
         logger (Optional[logging.Logger]): Custom logger instance for the chat model
+        support_model_config (Optional[SupportModelConfig]): Configuration for a supplementary model
+            that can be used to deserialize the LLM's response into a structured output
     """
     session_id: str = ""
     agent_id: str = ""
@@ -41,6 +59,7 @@ class ChatModelConfig(BaseModel):
     request_limit: int = 10  # Default: 10 requests per minute
     request_limit_period_seconds: int = 60  # Default: 60 seconds window
     logger: Optional[logging.Logger] = None
+    support_model_config: Optional[SupportModelConfig] = None
 
     class Config:
         arbitrary_types_allowed = True

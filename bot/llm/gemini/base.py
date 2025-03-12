@@ -14,9 +14,14 @@ from bot.types import LLMEngine
 from bot.llm.ratelimiter import RateLimiter
 
 from ..common import BaseChatModel
-from ..types import BaseStructuredOutput, ChatModelConfig, RawChatModelResponse
+from ..types import (
+    BaseStructuredOutput,
+    ChatModelConfig,
+    RawChatModelResponse
+)
 from .initialize import is_initialized
 
+SUPPORT_MODEL_SYSTEM_PROMPT = "Extract JSON from the LLM response."
 
 # From google.ai.generativelanguage_v1beta.types.Candidate
 # google/ai/generativelanguage_v1beta/types/generative_service.py
@@ -76,14 +81,21 @@ class GeminiChatModelResponse(RawChatModelResponse):
         arbitrary_types_allowed = True
 
 class ChatModel(BaseChatModel):
-    """A wrapper class for the Gemini generative model that maintains conversation history.
+    """A wrapper class for the Gemini generative model that maintains conversation history and handles structured outputs.
 
-    This class provides an interface to interact with Google's Gemini model while
-    maintaining the conversation history between prompts and responses.
+    This class provides an interface to interact with Google's Gemini model while maintaining 
+    the conversation history between prompts and responses. It supports structured outputs 
+    either directly through Gemini's built-in functionality or via a supplementary model 
+    that can be configured to parse unstructured responses into structured formats.
 
     Attributes:
         model: The underlying Gemini generative model instance
         _history: List of conversation turns between user and model
+        _generation_config: Configuration for text generation parameters
+        _logger: Logger instance for the chat model
+        _rate_limiter: Rate limiter to control API request frequency
+        _support_model: Optional supplementary model for response parsing
+        _is_support_model: Boolean flag indicating if this instance is a support model
     """
 
     def __init__(self, config: ChatModelConfig):
@@ -99,7 +111,9 @@ class ChatModel(BaseChatModel):
             max_output_tokens=config.max_tokens,
         )
 
-        if config.response_class:
+        # For the case when a supplementary model is used to deserialize the response
+        # of the main model, response schema for the main model must not be set.
+        if config.response_class and config.support_model_config is None:
             generation_config.response_schema = config.response_class.llm_schema(LLMEngine.GEMINI)
             generation_config.response_mime_type = "application/json"
 
@@ -120,6 +134,28 @@ class ChatModel(BaseChatModel):
             period=config.request_limit_period_seconds
         )
 
+        if config.support_model_config is not None:
+            # The configuration of supplementary model is almost the same as the main model
+            # except model name, temperature, and rate limiting parameters
+            support_model_config = ChatModelConfig(
+                session_id=config.session_id,
+                agent_id=config.agent_id,
+                llm_model_name=config.support_model_config.llm_model_name,
+                temperature=config.support_model_config.temperature,
+                response_class=config.response_class,
+                max_tokens=config.max_tokens, # Obviously, max tokens of the support model cannot be higher than max tokens of the main model
+                keep_raw_engine_responses=config.keep_raw_engine_responses,
+                raw_engine_responses_dir=config.raw_engine_responses_dir,
+                request_limit=config.support_model_config.request_limit,
+                request_limit_period_seconds=config.support_model_config.request_limit_period_seconds,
+                logger=config.logger
+            )
+            self._support_model = SupportModel(support_model_config)
+            self._is_support_model = False
+        else:
+            self._support_model = None
+            self._is_support_model = False
+
         super().__init__(config)
 
     def _generate_response(self, prompt: str, response_class: Optional[Any] = None) -> GeminiChatModelResponse:
@@ -130,17 +166,33 @@ class ChatModel(BaseChatModel):
         but only if generation is successful (finishes with STOP reason).
         If there's an error or unexpected finish reason, the prompt is removed from history.
 
+        The method implements several key features:
+        - Rate limiting: Uses a semaphore to pause requests when rate limits are reached
+        - Raw response logging: Can save the raw model responses to files for debugging
+        - Response processing: Can use a supplementary model to parse/adjust the main model's 
+          response into a structured format
+
         Args:
             prompt (str): The input text to send to the model
+            response_class (Optional[Any]): Class to deserialize the response into, if structured output is needed
 
         Returns:
-            GeminiChatModelResponse: The response from the Gemini model
+            GeminiChatModelResponse: The response from the Gemini model, either raw or structured
+                                   depending on configuration
         """
         if not is_initialized():
             self._logger.error("Gemini API not initialized. Call initialize() first.")
             return GeminiChatModelResponse(
                 success=False,
                 failure_reason=("Initialization Error", "Gemini API not initialized. Call initialize() first.")
+            )
+
+        # Check if supplementary model is configured but no response class is provided
+        if self._support_model is not None and response_class is None and not self._support_model.has_system_response_class:
+            self._logger.error("Supplementary model is configured but no response class is provided.")
+            return GeminiChatModelResponse(
+                success=False,
+                failure_reason=("Supplementary model usage error", "Supplementary model is configured but no response class is provided.")
             )
 
         # Before adding to history, check rate limit
@@ -152,9 +204,18 @@ class ChatModel(BaseChatModel):
         self._history.append(prompt_content)
 
         generation_config = dataclasses.replace(self._generation_config)
-        if response_class:
+        # For the case when a supplementary model is used to deserialize the response
+        # of the main model, response schema for the main model must not be used.
+        if response_class and self._support_model is None:
             generation_config.response_schema = response_class.llm_schema(LLMEngine.GEMINI)
             generation_config.response_mime_type = "application/json"
+
+        # When a supplementary model is used, the log message must include the name of the
+        # model to differentiate between errors of the main and the supplementary models
+        if self._support_model is not None or self._is_support_model:
+            logger_llm_name = f" by {self.llm_name}"
+        else:
+            logger_llm_name = ""
 
         try:
             # Request response from model for the prompt added to history
@@ -163,19 +224,56 @@ class ChatModel(BaseChatModel):
             # Roll back the prompt from history on error to avoid keeping prompts without
             # responses in history
             self._history.pop()
-            self._logger.error(f"Error generating response: {e}")
+            self._logger.error(f"Error generating response{logger_llm_name}: {e}")
             return GeminiChatModelResponse(
                 success=False,
                 failure_reason=("Error generating response", str(e))
             )
         
         # Before processing the response, save it to a file as is
-        self._save_response(response.candidates[0])
+        response_filepath = self._save_response(response)
+
+        # Check if candidates exist in the response
+        if not hasattr(response, 'candidates') or not response.candidates:
+            # Roll back the prompt from history on error to avoid keeping prompts without
+            # responses in history
+            self._history.pop()
+            self._logger.error(f"No candidates in response{logger_llm_name}. This may be due to max_tokens being too low.")
+            return GeminiChatModelResponse(
+                success=False,
+                failure_reason=("No data in response", "Either max_tokens is too low or other configuration issues.")
+            )
 
         # Get the finish reason for the response
         finish_reason = FinishReason(response.candidates[0].finish_reason)
 
         if finish_reason == FinishReason.STOP:
+            return self._process_successful_response(response, response_filepath, response_class)
+        else:
+            # Roll back the prompt from history on error to avoid keeping prompts without
+            # responses in history
+            self._history.pop()
+            self._logger.error(f"Unexpected finish reason{logger_llm_name}: {finish_reason.name}")
+            return GeminiChatModelResponse(
+                success=False,
+                failure_reason=("Unexpected finish reason", finish_reason.name)
+            )
+    
+    def _process_successful_response(self, response, response_filepath, response_class: Optional[Any] = None) -> GeminiChatModelResponse:
+        """Process a successful response from the model.
+        
+        This method handles the response when the finish reason is STOP, either returning
+        the direct response or processing it through a supplementary model if one is configured.
+        
+        Args:
+            response: The raw response from the Gemini model
+            response_filepath: Path to the saved response file
+            response_class: Optional class to deserialize the response into
+            
+        Returns:
+            GeminiChatModelResponse: The processed response
+        """
+        if self._support_model is None:
             # Add the response to history to be used as context in future interactions
             self._history.append(response.candidates[0].content)
             return GeminiChatModelResponse(
@@ -183,14 +281,60 @@ class ChatModel(BaseChatModel):
                 response=response.candidates[0].content.parts[0].text
             )
         else:
-            # Roll back the prompt from history on error to avoid keeping prompts without
-            # responses in history
-            self._history.pop()
-            self._logger.error(f"Unexpected finish reason: {finish_reason.name}")
-            return GeminiChatModelResponse(
-                success=False,
-                failure_reason=("Unexpected finish reason", finish_reason.name)
-            )
-        
+            self._support_model.raw_response_filepath = response_filepath
+            support_model_response = self._support_model.extract(response.candidates[0].content.parts[0].text, response_class)
+            if support_model_response.success:
+                self._history.append(response.candidates[0].content)
+                return support_model_response
+            else:
+                return GeminiChatModelResponse(
+                    success=False,
+                    failure_reason=support_model_response.failure_reason
+                )
+                
     def _deserialize_response(self, response: str, response_class: Any) -> BaseStructuredOutput:
         return response_class.deserialize(response, LLMEngine.GEMINI)
+
+class SupportModel(ChatModel):
+    """A supplementary model used to extract structured data from raw LLM responses.
+
+    This model takes raw responses from a main LLM model and formats them into structured
+    outputs according to a predefined schema. It uses a fixed system prompt focused on
+    JSON extraction and maintains the same configuration as the main model except for
+    the system prompt.
+
+    The support model is particularly useful when the main model's responses need to be
+    parsed into specific data structures but the main model itself cannot be relied upon
+    to consistently produce perfectly formatted output.
+    """
+    def __init__(self, draft_config: ChatModelConfig):
+        # Create a new config with the same values but predefined system prompt
+        new_config = ChatModelConfig(**draft_config.model_dump())
+        new_config.system_prompt = SUPPORT_MODEL_SYSTEM_PROMPT
+        super().__init__(new_config)
+        self._is_support_model = True
+    
+    @property
+    def has_system_response_class(self) -> bool:
+        """Check if the support model has a response class configured on the system prompt level."""
+        # it is set during initialization of BaseChatModel
+        if hasattr(self, '_response_class'):
+            return True
+        else:
+            return False
+
+    def extract(self, raw_response: str, response_class: Optional[Any] = None) -> GeminiChatModelResponse:
+        """Extract a structured output from the raw response.
+
+        The response of the supplementary model is returned as is, without any
+        deserialization assuming that deserialization is done in the main model.
+
+        Args:
+            raw_response (str): The raw response from the main model
+            response_class (Optional[Any]): The response class to deserialize the response into
+
+        Returns:
+            GeminiChatModelResponse: The response from the support model
+        """
+        self._logger.info("Formating response by support model.")
+        return self._generate_response(raw_response, response_class)
