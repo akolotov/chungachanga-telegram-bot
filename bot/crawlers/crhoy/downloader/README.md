@@ -169,7 +169,7 @@ The downloader follows this processing flow:
 
 4. **News Analysis** (for successfully downloaded articles)
    - **Age Check**: Verifies if the article is recent enough to analyze
-   - **Category Analysis**: Uses the LLM agent to categorize the article
+   - **Category Analysis**: Uses the LLM agents to categorize the article
    - **Relevance Check**: Determines if the article is relevant based on categorization
    - **Summary Generation**: For relevant articles, generates:
      - A concise English summary

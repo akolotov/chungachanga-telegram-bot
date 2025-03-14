@@ -21,7 +21,7 @@ from ..types import (
 )
 from .initialize import is_initialized
 
-SUPPORT_MODEL_SYSTEM_PROMPT = "Extract JSON from the LLM response."
+SUPPORT_MODEL_SYSTEM_PROMPT = "Extract JSON from the LLM response. Don't modify any values of the JSON."
 
 # From google.ai.generativelanguage_v1beta.types.Candidate
 # google/ai/generativelanguage_v1beta/types/generative_service.py

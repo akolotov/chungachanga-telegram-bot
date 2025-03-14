@@ -230,7 +230,12 @@ def analyze_news(
             raise NewsAnalyzerError(f"Category analysis failed: {e}")
             
         # Add new category if needed in a separate transaction
-        if category_result.category not in smart_categories:
+        #
+        # UNKNOWN_CATEGORY is a valid response from categorize_article when an article is not related to Costa Rica.
+        # It's intentionally excluded from smart_categories by _get_smart_categories() to prevent it from being 
+        # suggested as a valid category for related articles, but we still need to handle it here without 
+        # attempting to add it to the database since it's a special internal category.
+        if category_result.category not in smart_categories and category_result.category != UNKNOWN_CATEGORY:
             try:
                 new_category = CRHoySmartCategories(
                     category=category_result.category,

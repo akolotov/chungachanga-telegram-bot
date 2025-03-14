@@ -15,3 +15,19 @@ class GeminiTranslatorError(GeminiBaseError):
 class GeminiCategorizerError(GeminiBaseError):
     """Custom exception for Gemini Categorizer errors."""
     pass
+
+class GeminiClassifierError(GeminiBaseError):
+    """Custom exception for Gemini Classifier errors."""
+    pass
+
+class GeminiLabelerError(GeminiBaseError):
+    """Custom exception for Gemini Labeler errors."""
+    pass
+
+class GeminiNamerError(GeminiBaseError):
+    """Custom exception for Gemini Namer errors."""
+    pass
+
+class GeminiLabelFinalizerError(GeminiBaseError):
+    """Custom exception for Gemini Label Finalizer errors."""
+    pass

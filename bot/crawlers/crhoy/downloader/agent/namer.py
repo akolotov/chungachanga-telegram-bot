@@ -13,63 +13,65 @@ from bot.llm.gemini import response_content as content
 from bot.types import LLMEngine
 from ...common.logger import get_component_logger
 
-from .exceptions import GeminiSummarizerError
-from .prompts.summary import (
-    summarizer_prompt,
-    summarizer_structured_output
+from .exceptions import GeminiNamerError
+from .prompts.new_label import (
+    namer_prompt,
+    namer_structured_output
 )
 from . import agents_config
 
-logger = get_component_logger("downloader.agent.summarizer")
+logger = get_component_logger("downloader.agent.namer")
 
-class SummarizedArticle(BaseStructuredOutput):
-    """Structured output for article summarization."""
-    news_summary: str
+class NamedCategory(BaseStructuredOutput):
+    """Structured output for category naming."""
+    category_name: str
+    description: str
 
     @classmethod
     def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
-        return summarizer_structured_output
+        return namer_structured_output
 
     @classmethod
-    def deserialize(cls, json_str: str, _engine: LLMEngine) -> "SummarizedArticle":
-        """Deserialize the LLM response into a SummarizedArticle object."""
+    def deserialize(cls, json_str: str, _engine: LLMEngine) -> "NamedCategory":
+        """Deserialize the LLM response into a NamedCategory object."""
         try:
-            summarization_data = json.loads(json_str)
-
-            return SummarizedArticle(
-                news_summary=summarization_data["b_news_summary"]
+            naming_data = json.loads(json_str)
+            
+            return NamedCategory(
+                category_name=naming_data["b_category"],
+                description=naming_data["d_category_description"]
             )
 
         except (json.JSONDecodeError, KeyError) as e:
             logger.error(f"Failed to parse Gemini response: {e}")
             raise DeserializationError(f"Failed to parse Gemini response: {e}")
 
-class Summarizer(GeminiChatModel):
-    """Gemini-powered agent that summarizes Spanish news articles.
+class Namer(GeminiChatModel):
+    """Gemini-powered agent that suggests new category names for news articles.
     
-    This class extends GeminiChatModel to provide article summarization functionality:
+    This class extends GeminiChatModel to provide category naming functionality:
     - Analyzes the article content
-    - Creates a concise summary in English
-    - Ensures the summary is suitable for expats aged 25-45
+    - Suggests a suitable category name
+    - Provides a description for the suggested category
     
     The agent uses a structured prompt to ensure consistent output formatting and
-    leverages the Gemini model's capabilities for text analysis and summarization.
+    leverages the Gemini model's capabilities for text analysis and categorization.
     """
 
     def __init__(self, session_id: str = ""):
-        """Initialize the Summarizer agent with specific configuration.
+        """Initialize the Namer agent with specific configuration.
         
         Args:
             session_id (str): Unique identifier to track agents' responses belong to the same session
         """
-        config = agents_config.summarizer
+        config = agents_config.namer
         model_config = ChatModelConfig(
             session_id=session_id,
-            agent_id="summarizer",
+            agent_id="namer",
             llm_model_name=config.llm_model_name,
             temperature=config.temperature,
-            system_prompt=summarizer_prompt,
-            response_class=SummarizedArticle,
+            system_prompt=namer_prompt,
+            response_class=NamedCategory,
             max_tokens=config.max_tokens,
             keep_raw_engine_responses=config.keep_raw_engine_responses,
             raw_engine_responses_dir=config.raw_engine_responses_dir,
@@ -80,22 +82,24 @@ class Summarizer(GeminiChatModel):
         )
         super().__init__(model_config)
 
-    def process(self, article: str) -> Union[SummarizedArticle, BaseResponseError]:
-        """Process and summarize a news article.
+    def process(self, article: str) -> Union[NamedCategory, BaseResponseError]:
+        """Process and suggest a new category name for a news article.
         
-        This method takes Spanish news content and:
+        This method takes news content and:
         1. Analyzes the article content
-        2. Creates a concise summary in English
+        2. Suggests a suitable category name
+        3. Provides a description for the suggested category
         
         Args:
-            article (str): The Spanish news article to summarize
+            article (str): The news article to analyze
         
         Returns:
-            Union[SummarizedArticle, BaseResponseError]: Either a SummarizedArticle object containing:
-                - news_summary (str): The English summary of the article
-            Or a BaseResponseError if the summarization fails
+            Union[NamedCategory, BaseResponseError]: Either a NamedCategory object containing:
+                - category_name (str): The suggested category name
+                - description (str): Description of the suggested category
+            Or a BaseResponseError if the naming fails
         """
-        logger.info(f"Sending a request to Gemini to summarize a news article.")
+        logger.info(f"Sending a request to Gemini to suggest a category name for a news article.")
 
         try:
             model_response = self.generate_response(article)
@@ -103,7 +107,7 @@ class Summarizer(GeminiChatModel):
             return BaseResponseError(error=f"LLM engine responded with: {e}")
         except Exception as e:
             logger.error(f"Failed to generate response: {e}")
-            raise GeminiSummarizerError(f"Failed to generate response: {e}")
+            raise GeminiNamerError(f"Failed to generate response: {e}")
 
         return model_response.response
 
@@ -118,12 +122,12 @@ if __name__ == "__main__":
     # Create session ID
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Test summarization
-    summarizer = Summarizer(session_id)
-    result = summarizer.process(test_article)
-
+    # Test category naming
+    namer = Namer(session_id)
+    result = namer.process(test_article)
     if isinstance(result, BaseResponseError):
         print(f"Error: {result.error}")
     else:
-        print("\nSummary Results:")
-        print(f"English Summary: {result.news_summary}") 
+        print("\nCategory Naming Results:")
+        print(f"Suggested Category: {result.category_name}")
+        print(f"Category Description: {result.description}")

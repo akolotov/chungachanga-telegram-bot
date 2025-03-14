@@ -5,17 +5,26 @@ from typing import Dict, Union
 
 from bot.llm import BaseResponseError
 from ...common.logger import get_component_logger
-from .categorizer import Categorizer
 from .summarizer import Summarizer
-from .summary_verifier import SummaryVerifier
 from .translator import Translator
 from .exceptions import GeminiBaseError
-from .types import ActorWorkItem, ArticleSummary, ArticleCategory
+from .types import ActorWorkItem, ArticleSummary, ArticleCategory, ArticleRelation
+from .classifier import Classifier
+from .labeler import Labeler
+from .namer import Namer
+from .label_finalizer import LabelFinalizer
+from .prompts.category import UNKNOWN_CATEGORY, UNKNOWN_CATEGORY_DESCRIPTION
 
 logger = get_component_logger("downloader.agent.actor")
 
 def categorize_article(article: str, existing_categories: Dict[str, str], session_id: str = "") -> Union[ArticleCategory, BaseResponseError]:
-    """Process a Spanish news article to determine its category.
+    """Process a Spanish news article to determine its category using a multi-agent pipeline.
+
+    This function orchestrates a four-stage process:
+    1. Classification: Determines if the article is related to Costa Rica
+    2. Labeling: Identifies potential existing categories that match the article
+    3. Naming: Suggests a new category if needed
+    4. Finalization: Decides between existing and new categories
 
     Args:
         article (str): The original Spanish news article text to be processed
@@ -37,15 +46,84 @@ def categorize_article(article: str, existing_categories: Dict[str, str], sessio
         if not session_id:
             session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        categorizer = Categorizer(existing_categories, session_id)
-        categorization = categorizer.process(article)
-        if isinstance(categorization, BaseResponseError):
-            return categorization
-
+        # Step 1: Classify the article's relation to Costa Rica
+        classifier = Classifier(session_id)
+        classification_result = classifier.process(article)
+        if isinstance(classification_result, BaseResponseError):
+            return classification_result
+        
+        # If the article is not related to Costa Rica, return with UNKNOWN_CATEGORY
+        if classification_result.relation == ArticleRelation.NOT_APPLICABLE:
+            return ArticleCategory(
+                related=classification_result.relation,
+                category=UNKNOWN_CATEGORY,
+                category_description=UNKNOWN_CATEGORY_DESCRIPTION
+            )
+        
+        # Step 2: Label the article with existing categories
+        labeler = Labeler(existing_categories, session_id)
+        labeling_result = labeler.process(article)
+        if isinstance(labeling_result, BaseResponseError):
+            return labeling_result
+        
+        # Check if there's a category with rank > 95
+        high_rank_category = None
+        for suggestion in labeling_result.suggested_categories:
+            if suggestion.rank > 95:
+                high_rank_category = suggestion
+                break
+        
+        if high_rank_category:
+            return ArticleCategory(
+                related=classification_result.relation,
+                category=high_rank_category.category,
+                category_description=existing_categories.get(high_rank_category.category, "")
+            )
+        
+        # Step 3: Generate a new category suggestion that might be more appropriate
+        # Initialize Namer agent to suggest a potentially better category
+        namer = Namer(session_id)
+        naming_result = namer.process(article)
+        if isinstance(naming_result, BaseResponseError):
+            return naming_result
+            
+        if labeling_result.no_category:
+            return ArticleCategory(
+                related=classification_result.relation,
+                category=naming_result.category_name,
+                category_description=naming_result.description
+            )
+        
+        # Step 4: Finalize the category selection
+        # Extract only the categories suggested by the Labeler
+        suggested_categories = {}
+        for suggestion in labeling_result.suggested_categories:
+            category = suggestion.category
+            if category in existing_categories:
+                suggested_categories[category] = existing_categories[category]
+        
+        # Use label finalizer to decide between existing and new category
+        finalizer = LabelFinalizer(
+            suggested_categories,
+            (naming_result.category_name, naming_result.description),
+            session_id
+        )
+        
+        finalization_result = finalizer.process(article)
+        if isinstance(finalization_result, BaseResponseError):
+            return finalization_result
+        
+        # Determine the category description based on whether a new category was chosen
+        category_description = ""
+        if finalization_result.new_chosen:
+            category_description = naming_result.description
+        else:
+            category_description = existing_categories.get(finalization_result.category, "")
+        
         return ArticleCategory(
-            related=categorization.related,
-            category=categorization.category,
-            category_description=categorization.category_description
+            related=classification_result.relation,
+            category=finalization_result.category,
+            category_description=category_description
         )
 
     except GeminiBaseError as e:
@@ -53,10 +131,10 @@ def categorize_article(article: str, existing_categories: Dict[str, str], sessio
         raise GeminiBaseError(f"Unexpected error during categorization: {str(e)}")
 
 def summarize_article(article: str, target_language: str, session_id: str = "") -> Union[ArticleSummary, BaseResponseError]:
-    """Process a Spanish news article through a multi-stage pipeline to create a summary.
+    """Process a Spanish news article through a multi-agent pipeline to create a summary.
 
-    This function orchestrates a three-stage process:
-    1. Summarization & Verification: Creates and verifies a concise summary
+    This function orchestrates a two-stage process:
+    1. Summarization: Creates a concise English summary of the article
     2. Translation: Translates the summary to the target language
 
     Args:
@@ -80,37 +158,23 @@ def summarize_article(article: str, target_language: str, session_id: str = "") 
         
         # Generate initial summary
         summarizer = Summarizer(session_id)
-        initial_summary = summarizer.process(article)
-        if isinstance(initial_summary, BaseResponseError):
-            return initial_summary
-
-        # Verify and potentially adjust the summary
-        verifier = SummaryVerifier(session_id)
-        verification_result = verifier.verify(
-            ActorWorkItem(
-                original_article=article,
-                summary=initial_summary.news_summary
-            )
-        )
-        if isinstance(verification_result, BaseResponseError):
-            return verification_result
-
-        # Use verified/adjusted summary
-        final_summary = verification_result.news_summary if verification_result.adjustments_required else initial_summary.news_summary
+        summary = summarizer.process(article)
+        if isinstance(summary, BaseResponseError):
+            return summary
 
         # Translate the summary
         translator = Translator(target_language, session_id)
         translated_summary = translator.translate(
             ActorWorkItem(
                 original_article=article,
-                summary=final_summary
+                summary=summary.news_summary
             )
         )
         if isinstance(translated_summary, BaseResponseError):
             return translated_summary
 
         return ArticleSummary(
-            summary=final_summary,
+            summary=summary.news_summary,
             translated_summary=translated_summary.translated_summary
         )
 

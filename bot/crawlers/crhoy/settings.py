@@ -161,6 +161,12 @@ class CRHoyCrawlerSettings(BaseSettings):
         gt=0
     )
 
+    agent_engine_basic_model_requires_supplementary: bool = Field(
+        default=False,
+        description="Whether the basic model requires a supplementary model",
+        validation_alias="AGENT_ENGINE_BASIC_MODEL_REQUIRES_SUPPLEMENTARY"
+    )
+
     agent_engine_light_model: str = Field(
         default="gemini-2.0-flash-lite-preview-02-05",
         description="Lightweight model to use for the LLM engine",
@@ -178,6 +184,32 @@ class CRHoyCrawlerSettings(BaseSettings):
         default=60,
         description="Time window (in seconds) after which the request limit for the lightweight model are applied",
         validation_alias="AGENT_ENGINE_LIGHT_MODEL_REQUEST_LIMIT_PERIOD_SECONDS",
+        gt=0
+    )
+
+    agent_engine_light_model_requires_supplementary: bool = Field(
+        default=False,
+        description="Whether the lightweight model requires a supplementary model",
+        validation_alias="AGENT_ENGINE_LIGHT_MODEL_REQUIRES_SUPPLEMENTARY"
+    )
+
+    agent_engine_supplementary_model: str = Field(
+        default="gemini-2.0-flash-lite",
+        description="Supplementary model to use for the LLM engine to help parse raw responses into structured outputs",
+        validation_alias="AGENT_ENGINE_SUPPLEMENTARY_MODEL"
+    )
+
+    agent_engine_supplementary_model_request_limit: int = Field(
+        default=15,
+        description="Request limit for the supplementary model",
+        validation_alias="AGENT_ENGINE_SUPPLEMENTARY_MODEL_REQUEST_LIMIT",
+        gt=0
+    )
+
+    agent_engine_supplementary_model_request_limit_period_seconds: int = Field(
+        default=60,
+        description="Time window (in seconds) after which the request limit for the supplementary model are applied",
+        validation_alias="AGENT_ENGINE_SUPPLEMENTARY_MODEL_REQUEST_LIMIT_PERIOD_SECONDS",
         gt=0
     )
 

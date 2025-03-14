@@ -8,7 +8,7 @@ This repository contains a standalone agent component that orchestrates news art
 
 The agent component processes news articles in a multi-stage pipeline using the `bot.llm` module's structured output capabilities and conversation management. The two primary responsibilities are:
 
-- **Categorization:** Analyzes the article content to determine its category and, if necessary, generates a description for new or ambiguous categories.
+- **Categorization:** Analyzes the article content to determine its category through a multi-agent pipeline that classifies, labels, names, and finalizes categories.
 - **Summarization:** Generates a concise summary of the news article, intended for quick consumption by a target audience. This stage may also incorporate translation capabilities via a dedicated translator agent.
 
 ---
@@ -21,22 +21,30 @@ All agents are built on top of the `bot.llm` module, which provides:
 
 Each agent defines its output schema using `BaseStructuredOutput`:
 
-- `CategorizedArticle`: For categorization results
+- `ClassifiedArticle`: For article relation classification
+- `LabeledArticle`: For category labeling results
+- `NamedCategory`: For new category naming
+- `FinalizedLabel`: For category finalization
 - `SummarizedArticle`: For article summaries
-- `VerifiedSummary`: For verification results
 - `TranslatedSummary`: For translations
 
-Example from the Categorizer:
+Example from the Labeler, which handles more complex structured output:
 
 ```python
-class CategorizedArticle(BaseStructuredOutput):
-    related: ArticleRelation
+@dataclass
+class CategorySuggestion:
+    """Represents a category suggestion with its suitability rank."""
     category: str
-    category_description: str
+    rank: int
+
+class LabeledArticle(BaseStructuredOutput):
+    """Structured output for article labeling."""
+    no_category: bool
+    suggested_categories: List[CategorySuggestion]
 
     @classmethod
     def llm_schema(cls, _engine: LLMEngine) -> content.Schema:
-        return categorizer_structured_output
+        return labeler_structured_output
 ```
 
 ### Conversation Management
@@ -55,14 +63,40 @@ class CategorizedArticle(BaseStructuredOutput):
 
 ## Agent Components
 
-### Categorizer Agent (`categorizer.py`)
+### Classifier Agent (`classifier.py`)
 
-- **Purpose:** Analyzes Spanish news articles to determine their relevance to Costa Rica and assigns appropriate categories
+- **Purpose:** Determines whether a Spanish news article is related to Costa Rica
 - **Features:**
-  - Evaluates direct/indirect relation to Costa Rica
-  - Matches content with existing categories
-  - Suggests and describes new categories when needed
-  - Uses structured output for consistent categorization  
+  - Evaluates if the article is directly related, indirectly related, or not related to Costa Rica
+  - Uses structured output to provide consistent classification
+  - Returns an ArticleRelation enum value (DIRECTLY, INDIRECTLY, NOT_APPLICABLE)
+
+### Labeler Agent (`labeler.py`)
+
+- **Purpose:** Identifies potential existing categories that match the article content
+- **Features:**
+  - Analyzes article content against existing category definitions
+  - Ranks categories by relevance to the article
+  - Determines if no existing category is suitable
+  - Returns a list of CategorySuggestion objects with ranks
+
+### Namer Agent (`namer.py`)
+
+- **Purpose:** Suggests new category names and descriptions when existing categories don't fit
+- **Features:**
+  - Creates concise, descriptive category names
+  - Generates comprehensive category descriptions
+  - Ensures consistency with existing category naming conventions
+  - Returns a NamedCategory with name and description
+
+### Label Finalizer Agent (`label_finalizer.py`)
+
+- **Purpose:** Makes the final decision between existing and new categories
+- **Features:**
+  - Compares suitability of existing categories against newly suggested ones
+  - Uses obfuscation techniques to prevent bias toward new or existing categories
+  - Makes a definitive category selection
+  - Returns a FinalizedLabel with the chosen category
 
 ### Summarizer Agent (`summarizer.py`)
 
@@ -72,15 +106,6 @@ class CategorizedArticle(BaseStructuredOutput):
   - Generates summaries tailored for expats aged 25-45
   - Maintains casual, friendly tone while ensuring accuracy
   - Provides detailed news analysis including actors, actions, and consequences
-
-### Summary Verifier Agent (`summary_verifier.py`)
-
-- **Purpose:** Validates and improves English summaries
-- **Features:**
-  - Cross-checks summary against original article
-  - Ensures factual accuracy and completeness
-  - Suggests adjustments when needed
-  - Maintains consistent style guidelines
 
 ### Translator Agent (`translator.py`)
 
@@ -99,14 +124,34 @@ The functionality of the agents is driven by configuration defined in `agents_co
 ### Model Configurations
 
 - **Basic Model (`BASIC_MODEL`):**
-  - Used for sophisticated tasks requiring advanced reasoning (e.g., categorization)
+  - Used for sophisticated tasks requiring advanced reasoning (e.g., classification, labeling)
   - Handles tasks needing real-world knowledge and complex analysis
   - Configurable request limits and time windows
+  - May require a supplementary model for structured output processing
 
 - **Light Model (`LIGHT_MODEL`):**
-  - Used for straightforward tasks (summarization, translation, verification)
+  - Used for straightforward tasks (summarization, translation)
   - Optimized for tasks with well-defined patterns and structures
   - Separate request limits and time windows
+  - Generally doesn't require supplementary model assistance
+
+- **Supplementary Model (`SUPPLEMENTARY_MODEL`):**
+  - Assists the primary models with structured output processing
+  - Used when the primary model has limitations with structured output functionality
+  - Runs with minimal temperature (0.0) for deterministic parsing
+  - Has its own request limits and time windows
+  - Configured via `SupportModelConfig` in agent configurations
+
+Example supplementary model configuration:
+
+```python
+supplementary_model_config=SupportModelConfig(
+    llm_model_name=SUPPLEMENTARY_MODEL,
+    temperature=SUPPLEMENTARY_MODEL_TEMPERATURE,
+    request_limit=SUPPLEMENTARY_MODEL_LIMIT,
+    request_limit_period_seconds=SUPPLEMENTARY_MODEL_LIMIT_PERIOD
+) if BASIC_MODEL_REQUIRES_SUPPLEMENTARY else None
+```
 
 ### Agent-Specific Settings
 
@@ -116,6 +161,7 @@ Each agent has its own `AgentConfig` instance with:
 - Maximum token limits
 - Response storage configuration for debugging purposes
 - Request rate limiting
+- Supplementary model configuration (if required)
 
 ---
 
@@ -123,15 +169,35 @@ Each agent has its own `AgentConfig` instance with:
 
 The `prompts` directory contains structured templates for each agent:
 
-- `category.py`: Defines categorization guidelines and output schema
+- `relation.py`: Defines classification guidelines for article relation to Costa Rica
+- `label.py`: Specifies labeling rules for matching articles to existing categories
+- `new_label.py`: Outlines requirements for creating new category names and descriptions
+- `label_finalization.py`: Details criteria for finalizing category selection
 - `summary.py`: Specifies summarization rules and analysis structure
-- `verification.py`: Details verification criteria and adjustment format
 - `translation.py`: Outlines translation requirements and output format
 
 Each prompt file includes:
 
 - System instructions for the LLM
 - Structured output schema definition
+
+---
+
+## Orchestration
+
+The `actor.py` file provides high-level functions that orchestrate the multi-agent pipeline:
+
+- `categorize_article()`: Coordinates the four-stage categorization process:
+  1. Classification with Classifier
+  2. Labeling with Labeler
+  3. Naming with Namer (if needed)
+  4. Finalization with LabelFinalizer
+
+- `summarize_article()`: Manages the summarization and translation process:
+  1. Summarization with Summarizer
+  2. Translation with Translator (if needed)
+
+These functions handle the flow of information between agents, error handling, and returning the final results.
 
 ---
 
@@ -146,7 +212,7 @@ Each prompt file includes:
    - All responses follow the same structure
    - System prompt can fully define the expected output format
    - Response processing is consistent across all inputs
-   Example use case: The Categorizer agent, which always returns category, relation, and description.
+   Example use case: The Classifier agent, which always returns an ArticleRelation value.
 
    ```python
    class NewAgentOutput(BaseStructuredOutput):
@@ -198,6 +264,7 @@ Each prompt file includes:
    - Choose appropriate model (basic/light) based on task complexity
    - Configure temperature, tokens, and rate limits
    - Add any new configuration parameters to `settings.py`
+   - Determine if a supplementary model is needed for structured output processing
 
 3. **Implement Agent Class:**
    Choose implementation based on your schema approach:
